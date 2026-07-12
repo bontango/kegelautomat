@@ -1,0 +1,7 @@
+# Fremde, urheberrechtlich geschuetzte Datenblaetter / Pinout nicht oeffentlich mitliefern
+datasheets/MCP23S17_MIC.pdf
+datasheets/max7219-max7221.pdf
+datasheets/Development Board ESP32 C3 Sup.png
+
+# lokale Claude-Plan-/Arbeitsdateien
+.claude/

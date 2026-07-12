@@ -1,0 +1,18 @@
+Projekt Kegelautomat
+Der Kegelautomat ist ein Wandgerät aus den 70er Jahren an dem mit einem
+kleinen Hebel versucht wird Kugeln so 'einzuschiessen' dass möglichst viele 'Kegel' umfallen.
+Die Kegel werden dabei von Lampen symbolisiert. Auf einem LED 7segment Display werden die erzielten Punkte angezeigt.
+Spulen sorgen beim Münzeinwurf dafür dass im 'Aus' Zustand die Münzen durchfallen.
+Insgesamt hat der Kegelautomat:
+30x Lampen (5Volt, geschaltet über GND)
+12x Kontakte ( Einzelkontakte, keine Matrix, schalten gegen GND)
+3x Spulen (24Volt, geschaltet über GND)
+8x 7segment Displays (common Kathode)
+Im Projekt soll eine Steuerplatine für den Automaten entworfen werden die den originalen Spielablauf nachbildet.
+Geplante Hardware für die Steuerplatine:
+ESP32-C3 Miniplatine für die zentrale Steuerung. ( C-Programm mit Espressif/VScode im zweiten Step) 
+Die ESP32-C3 Miniplatine hat die GPIOs: 0 bis 10 sowie 20 und 21.
+Lampen via 4x595 Schieberegister in Kaskade (32 Lampen möglich) die jeweils 32 (Mini) Mosfets für Standard Lampen treiben
+Kontakte und Spulen via MCP23S17 (SPI Portexpander mit 16 IOs, d.h. 3 Reserve) , Kontakte einzeln signalisiert über IntA & IntB, Spulen mit Mosfet Treibern IRL540
+Displays via MAX7219 ( Display Treiber mit SPI Schnittstelle )
+

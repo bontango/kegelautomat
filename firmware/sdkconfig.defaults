@@ -1,0 +1,6 @@
+# Zielchip
+CONFIG_IDF_TARGET="esp32c3"
+
+# Konsole/Log über den nativen USB-Serial/JTAG-Controller (GPIO18/19).
+# Damit bleibt UART0 (GPIO20/21) frei – GPIO20 wird als Sound-Ausgang genutzt.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y

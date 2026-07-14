@@ -1,0 +1,8 @@
+# ESP-IDF Build-Artefakte
+/build/
+sdkconfig
+sdkconfig.old
+
+# Hinweis: Wegen Windows-MAX_PATH und UNC-Netzlaufwerk mit
+#   idf.py -B <kurzer lokaler Pfad>  bauen (z. B. C:\Users\<user>\kb).
+# sdkconfig.defaults wird versioniert, sdkconfig ist generiert.

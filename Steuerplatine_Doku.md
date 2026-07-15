@@ -2,7 +2,7 @@
 
 **Projekt:** Nachbau der Steuerung eines Wandkegelautomaten „Bowling de Luxe / Mini Sport Kegler" (Fa. Dibisch, ~1970er)
 **Zentrale Steuerung:** ESP32-S3-WROOM-1-N16R8
-**Stand:** 2026-07-14
+**Stand:** 2026-07-15 (Portbelegung an das fertige Prototyp-Layout angepasst)
 
 > **Wechsel C3 → S3:** Der ursprüngliche Entwurf nutzte einen ESP32-C3 Super Mini mit
 > LEDC-PWM-Sound. Weil die Audioqualität nicht überzeugte, läuft die Steuerung jetzt auf
@@ -70,7 +70,7 @@ graph LR
     ESP -- "SPI3: SCLK,MOSI,MISO,CS_MCP,INT" --> MCP
     ESP -- "SPI3-SCLK,MOSI + LOAD (3,3 V)" --> HCT
     ESP -- "595: SER,SRCLK,RCLK (3,3 V)" --> HCT
-    ESP -- "GPIO18 (3,3 V)" --> Q
+    ESP -- "GPIO16 (3,3 V)" --> Q
     ESP -- "2× Spule (3,3 V)" --> HCT
 
     HCT -- "CLK,DIN,LOAD (5 V)" --> MAX
@@ -116,7 +116,7 @@ Der ESP32-S3 gibt an seinen GPIOs nur **3,3 V** aus. Mehrere 5-V-Bausteine verla
 
 3. **595 mit 5 V betreiben** – dadurch liefern die 595-Ausgänge 5 V an die Lampen-MOSFET-Gates (sauberes Durchschalten der Logic-Level-MOSFETs).
 
-4. **IRL540-Gate-Ansteuerung ebenfalls über den 74HCT541.** Die 2 Spulen-Steuersignale kommen als 3,3-V-Ausgang direkt aus dem ESP32-S3 (GPIO21/47) und werden im 74HCT541 auf 5 V gepegelt → volle Gate-Spannung an den IRL540. Das behebt die grenzwertige 3,3-V-Gate-Ansteuerung.
+4. **IRL540-Gate-Ansteuerung ebenfalls über den 74HCT541.** Die 2 Spulen-Steuersignale kommen als 3,3-V-Ausgang direkt aus dem ESP32-S3 (GPIO12/11) und werden im 74HCT541 auf 5 V gepegelt → volle Gate-Spannung an den IRL540. Das behebt die grenzwertige 3,3-V-Gate-Ansteuerung.
 
 5. **595-`/OE` über einen 2N7002 (Open-Drain)** statt über den 74HCT541 – so bleibt der Pegelwandler bei **einem** IC. Details in Abschnitt 6.1.
 
@@ -135,7 +135,7 @@ Das Modul **ESP32-S3-WROOM-1-N16R8** (16 MB Flash, **8 MB Octal-PSRAM**) führt 
 | **19, 20** | **USB D-/D+** (nativ, USB-Serial/JTAG) | Konsole/Programmierung → frei halten |
 | **43, 44** | **UART0** TX/RX | Debug-Konsole → frei halten |
 | **0** | Strapping (Boot) + BOOT-Taster | reserviert |
-| **3** | Strapping (JTAG-Quellwahl) | unkritisch bei USB-JTAG; hier I²S-LRC (nur „weiche" DIP-Beschaltung) |
+| **3** | Strapping (JTAG-Quellwahl) | unkritisch bei USB-JTAG; hier 74HC595-`SER` (reiner Ausgang, kein externer Treiber) – Pulldown empfohlen |
 | **45** | Strapping (VDD_SPI) | nicht für Peripherie |
 | **46** | Strapping (Boot/ROM-Messages) | nicht für Peripherie |
 
@@ -154,27 +154,28 @@ Das Modul **ESP32-S3-WROOM-1-N16R8** (16 MB Flash, **8 MB Octal-PSRAM**) führt 
 | **2**  | SD **MOSI** | OUT | → SD-Kartenleser | SPI2 |
 | **38** | SD **CLK**  | OUT | → SD-Kartenleser | SPI2 |
 | **48** | SD **MISO** | IN  | ← SD-Kartenleser | SPI2 |
-| **3**  | I²S **LRC** (+DIP1) | OUT/IN | → MAX98357A LRC | Strapping-Pin; DIP1 gemultiplext |
-| **9**  | I²S **BCLK** (+DIP2) | OUT/IN | → MAX98357A BCLK | DIP2 gemultiplext |
-| **10** | I²S **DIN** (+DIP3) | OUT/IN | → MAX98357A DIN | DIP3 gemultiplext |
+| **47** | I²S **LRC** (+DIP1) | OUT/IN | → MAX98357A LRC | DIP1 gemultiplext |
+| **21** | I²S **BCLK** (+DIP2) | OUT/IN | → MAX98357A BCLK | DIP2 gemultiplext |
+| **14** | I²S **DIN** (+DIP3) | OUT/IN | → MAX98357A DIN | DIP3 gemultiplext |
 | **4**  | **ADJUST**-Taster | IN | Taster gegen GND | Bedienung |
 | **5**  | **SET**-Taster | IN | Taster gegen GND | Bedienung |
-| **12** | **DIP-Read-Enable** | OUT | → DIP-Puffer (Tri-State) | gibt DIP1-3 auf 3/9/10 frei |
-| **11** | SPI3 **SCLK** | OUT | → 74HCT541 (→MAX) **und** direkt → MCP | HW-SPI3-Takt |
-| **13** | SPI3 **MOSI** | OUT | → 74HCT541 (→MAX) **und** direkt → MCP | |
-| **14** | SPI3 **MISO** | IN | ← MCP23S17 SO (3,3 V) | nur MCP treibt MISO |
-| **15** | **MAX7219 LOAD** (CS) | OUT | → 74HCT541 → MAX7219 | Display-Latch |
-| **16** | **MCP23S17 /CS** | OUT | → MCP23S17 CS (3,3 V) | Pull-up nach 3,3 V |
-| **17** | **MCP23S17 INT** | IN | ← MCP INTA/INTB (gespiegelt) | 1 Interrupt-Leitung |
-| **6**  | **74HC595 SER** | OUT | → 74HCT541 → 595 (Daten) | dedizierte Lampen-IOs |
-| **7**  | **74HC595 SRCLK** | OUT | → 74HCT541 → 595 (Schiebetakt) | |
-| **8**  | **74HC595 RCLK** | OUT | → 74HCT541 → 595 (Latch) | |
-| **18** | **74HC595 /OE** | OUT | → 2N7002 → 595 `/OE` | invertiert; HIGH = Lampen an (siehe 6.1) |
-| **21** | **Spule 1** | OUT | → 74HCT541 → IRL540 #1 | |
-| **47** | **Spule 2** | OUT | → 74HCT541 → IRL540 #2 | |
+| **13** | **DIP-Read-Enable** | OUT | → DIP-Puffer (Tri-State) | gibt DIP1-3 auf 47/21/14 frei |
+| **17** | SPI3 **SCLK** | OUT | → 74HCT541 (→MAX) **und** direkt → MCP | HW-SPI3-Takt |
+| **8**  | SPI3 **MOSI** | OUT | → 74HCT541 (→MAX) **und** direkt → MCP | |
+| **7**  | SPI3 **MISO** | IN | ← MCP23S17 SO (3,3 V) | nur MCP treibt MISO |
+| **18** | **MAX7219 LOAD** (CS) | OUT | → 74HCT541 → MAX7219 | Display-Latch |
+| **15** | **MCP23S17 /CS** | OUT | → MCP23S17 CS (3,3 V) | Pull-up nach 3,3 V |
+| **6**  | **MCP23S17 INT** | IN | ← MCP INTA/INTB (gespiegelt) | 1 Interrupt-Leitung |
+| **3**  | **74HC595 SER** | OUT | → 74HCT541 → 595 (Daten) | dedizierte Lampen-IOs; Strapping-Pin, Pulldown empfohlen |
+| **10** | **74HC595 SRCLK** | OUT | → 74HCT541 → 595 (Schiebetakt) | |
+| **9**  | **74HC595 RCLK** | OUT | → 74HCT541 → 595 (Latch) | |
+| **16** | **74HC595 /OE** | OUT | → 2N7002 → 595 `/OE` | invertiert; HIGH = Lampen an (siehe 6.1) |
+| **12** | **Spule 1** | OUT | → 74HCT541 → IRL540 #1 | |
+| **11** | **Spule 2** | OUT | → 74HCT541 → IRL540 #2 | |
 | 0 | BOOT | — | BOOT-Taster | reserviert |
 | 19/20 | USB | — | USB-Serial/JTAG | Konsole/Flash |
 | 43/44 | UART0 | — | Debug | frei/Debug |
+| 39–42 | **Reserve** | — | frei | JTAG-Pins, bei USB-JTAG als GPIO nutzbar |
 
 **Festverdrahtete Steuerpins (kein GPIO nötig):**
 - MCP23S17 `/RESET` → fest auf **3,3 V** (Pull-up 10 kΩ).
@@ -182,7 +183,7 @@ Das Modul **ESP32-S3-WROOM-1-N16R8** (16 MB Flash, **8 MB Octal-PSRAM**) führt 
 - 74HCT541 `/OE1`, `/OE2` (Pin 1 + 19) → **GND** (Buffer immer aktiv).
 - MAX98357A `SD_MODE`/`GAIN` → per Widerstand (Kanalwahl (L+R)/2, Gain nach Wunsch).
 
-> Alle **12** zuvor freien GPIOs (6,7,8,11,13,14,15,16,17,18,21,47) sind belegt → **0 Reserve** am ESP. Zusätzlich frei bleiben nur die System-Pins (USB/UART/Boot). Am MCP23S17 stehen **2 Reserve**-Eingänge zur Verfügung.
+> **Bilanz:** 22 GPIOs belegt (1–18, 21, 38, 47, 48). Frei bleiben **GPIO 39–42** → **4 Reserve** am ESP (die JTAG-Pins MTCK/MTDO/MTDI/MTMS; nutzbar, solange Konsole und Debugger über USB laufen). Zusätzlich reserviert sind die System-Pins (USB 19/20, UART0 43/44, BOOT 0). Am MCP23S17 stehen **2 Reserve**-Eingänge zur Verfügung.
 
 ---
 
@@ -192,14 +193,14 @@ Oktal-Buffer, nicht invertierend. Eingänge 3,3-V-tauglich (HCT), Ausgänge trei
 
 | Kanal | Eingang (3,3 V) von | Ausgang (5 V) nach | Funktion |
 |:-----:|---------------------|--------------------|----------|
-| 1 | ESP GPIO11 (SPI3-SCLK) | MAX7219 CLK | Display-Takt |
-| 2 | ESP GPIO13 (SPI3-MOSI) | MAX7219 DIN | Display-Daten |
-| 3 | ESP GPIO15 (LOAD) | MAX7219 LOAD | Display-Latch |
-| 4 | ESP GPIO6 (SER) | 595 SER | Lampen-Daten |
-| 5 | ESP GPIO7 (SRCLK) | 595 SRCLK | Lampen-Schiebetakt |
-| 6 | ESP GPIO8 (RCLK) | 595 RCLK | Lampen-Latch |
-| 7 | ESP GPIO21 | IRL540 #1 Gate | Spule 1 |
-| 8 | ESP GPIO47 | IRL540 #2 Gate | Spule 2 |
+| 1 | ESP GPIO17 (SPI3-SCLK) | MAX7219 CLK | Display-Takt |
+| 2 | ESP GPIO8 (SPI3-MOSI) | MAX7219 DIN | Display-Daten |
+| 3 | ESP GPIO18 (LOAD) | MAX7219 LOAD | Display-Latch |
+| 4 | ESP GPIO3 (SER) | 595 SER | Lampen-Daten |
+| 5 | ESP GPIO10 (SRCLK) | 595 SRCLK | Lampen-Schiebetakt |
+| 6 | ESP GPIO9 (RCLK) | 595 RCLK | Lampen-Latch |
+| 7 | ESP GPIO12 | IRL540 #1 Gate | Spule 1 |
+| 8 | ESP GPIO11 | IRL540 #2 Gate | Spule 2 |
 
 Alle 8 Kanäle belegt. Die SPI3-Leitungen SCLK/MOSI gehen **zusätzlich** direkt (ungepuffert, 3,3 V) an den MCP23S17. Die Mischung aus schnellem Takt und langsamen DC-Spulensignalen in einem Baustein ist unkritisch.
 
@@ -208,20 +209,20 @@ Alle 8 Kanäle belegt. Die SPI3-Leitungen SCLK/MOSI gehen **zusätzlich** direkt
 Würde `/OE` ebenfalls über den 74HCT541 laufen, wären **9** Leitungen nötig → ein zweiter IC. Stattdessen ein **2N7002** (kleiner logic-level N-MOSFET) als Open-Drain-Treiber:
 
 ```
-ESP GPIO18 ──[ 10k Pulldown → GND ]
+ESP GPIO16 ──[ 10k Pulldown → GND ]
      │
      └──► Gate 2N7002      Drain ──┬──► 595 /OE
                                     └──[ 10k Pull-up → +5 V ]
                            Source ──► GND
 ```
 
-- **GPIO18 HIGH** → FET leitet → `/OE` = LOW → **Lampen aktiv**.
-- **GPIO18 LOW / Boot (Hi-Z)** → FET sperrt → Pull-up zieht `/OE` = 5 V → **Lampen aus**.
-- Der Gate-Pulldown sorgt beim Boot (GPIO18 noch Eingang) für sicheres Sperren → **Boot-Blanking bleibt erhalten**.
+- **GPIO16 HIGH** → FET leitet → `/OE` = LOW → **Lampen aktiv**.
+- **GPIO16 LOW / Boot (Hi-Z)** → FET sperrt → Pull-up zieht `/OE` = 5 V → **Lampen aus**.
+- Der Gate-Pulldown sorgt beim Boot (GPIO16 noch Eingang) für sicheres Sperren → **Boot-Blanking bleibt erhalten**.
 - Der ESP-Pin sieht nie 5 V (durch den FET entkoppelt) → kein Problem mit fehlender 5-V-Toleranz.
-- **PWM-Dimmen** weiter möglich (invertiertes Duty auf GPIO18); Anstiegsflanke über das RC aus Pull-up + Gate-Kapazität – für globale Lampenhelligkeit unkritisch.
+- **PWM-Dimmen** weiter möglich (invertiertes Duty auf GPIO16); Anstiegsflanke über das RC aus Pull-up + Gate-Kapazität – für globale Lampenhelligkeit unkritisch.
 
-> **Achtung Firmware:** Die Logik ist **invertiert** – GPIO18 = HIGH schaltet die Lampen **ein**.
+> **Achtung Firmware:** Die Logik ist **invertiert** – GPIO16 = HIGH schaltet die Lampen **ein**.
 
 ---
 
@@ -230,10 +231,10 @@ ESP GPIO18 ──[ 10k Pulldown → GND ]
 **Aufbau:** 4× 74HC595 in Reihe (QH' → SER des nächsten) = **32-Bit-Schieberegister**. Versorgung **5 V**. Jeder Ausgang treibt das Gate eines kleinen **Logic-Level-N-MOSFET** (z. B. 2N7002 / AO3400), der die zugehörige Lampe **low-side** gegen GND schaltet. Lampen-Pluspol liegt fest auf 5 V. Angesteuert über **eigene, dedizierte ESP-IOs** (nicht am SPI3-Bus).
 
 **Signale:**
-- `SER` ← 74HCT541 (GPIO6, 5 V) – Daten
-- `SRCLK` ← 74HCT541 (GPIO7, 5 V) – Schiebetakt
-- `RCLK` ← 74HCT541 (GPIO8, 5 V) – Übernahme ins Ausgangs-Latch
-- `/OE` ← 2N7002 (GPIO18, 5 V) – LOW = Ausgänge aktiv, HIGH = alle Ausgänge hochohmig (siehe 6.1)
+- `SER` ← 74HCT541 (GPIO3, 5 V) – Daten
+- `SRCLK` ← 74HCT541 (GPIO10, 5 V) – Schiebetakt
+- `RCLK` ← 74HCT541 (GPIO9, 5 V) – Übernahme ins Ausgangs-Latch
+- `/OE` ← 2N7002 (GPIO16, 5 V) – LOW = Ausgänge aktiv, HIGH = alle Ausgänge hochohmig (siehe 6.1)
 - `/SRCLR` → fest 5 V
 
 **Bit-Zuordnung (Vorschlag):**
@@ -260,9 +261,9 @@ ESP GPIO18 ──[ 10k Pulldown → GND ]
 Der MAX7219 ist ein serieller Anzeigentreiber für bis zu **8 Digits common cathode** – passt exakt zu den 8 Punktedisplays. Versorgung **V+ = 5 V** (Bereich 4,0–5,5 V). Angebunden am **SPI3-Bus** (gemeinsam mit dem MCP23S17, eigene LOAD-Leitung).
 
 **Signale (alle 5 V, aus dem 74HCT541):**
-- `DIN` ← SPI3-MOSI (GPIO13)
-- `CLK` ← SPI3-SCLK (GPIO11)
-- `LOAD` ← GPIO15
+- `DIN` ← SPI3-MOSI (GPIO8)
+- `CLK` ← SPI3-SCLK (GPIO17)
+- `LOAD` ← GPIO18
 
 **Beschaltung / Konfiguration:**
 - **RSET** zwischen V+ und ISET setzt den Segment-Spitzenstrom; Minimum 9,53 kΩ (≈ 40 mA). Wert nach gewünschter Helligkeit / Display-Datenblatt wählen.
@@ -294,11 +295,11 @@ SPI-Port-Expander mit **16 IO** (Port A: GPA0–7, Port B: GPB0–7). Versorgung
 - Alle Eingänge mit **internem Pull-up** (`GPPU` = 1). Ein geschlossener Kontakt zieht den Pin auf GND.
 - **Interrupt-on-Change** (`GPINTEN` = 1, Vergleich gegen Vorwert) meldet jede Kontaktänderung.
 - **INTA/INTB gespiegelt** (`IOCON.MIRROR` = 1) → beide Ports lösen **eine** gemeinsame INT-Leitung aus. Das spart einen ESP-Pin; der ISR liest anschließend per SPI `INTF`/`INTCAP`/`GPIO` beider Ports und ermittelt den geänderten Kontakt.
-- Der ESP reagiert auf die INT-Flanke an **GPIO17**.
+- Der ESP reagiert auf die INT-Flanke an **GPIO6**.
 
 ### 9.3 Spulen-Leistungsteil (IRL540, direkt vom ESP)
 
-- **ESP-Ausgang** (GPIO21/47) HIGH → 74HCT541 (5 V) → **IRL540-Gate** → Spule (24 V) low-side eingeschaltet.
+- **ESP-Ausgang** (GPIO12/11) HIGH → 74HCT541 (5 V) → **IRL540-Gate** → Spule (24 V) low-side eingeschaltet.
 - **Gate-Pulldown (z. B. 10 kΩ)** je IRL540 → definierter Aus-Zustand bei Boot / vor Firmware-Init (die ESP-Ausgänge sind vor der Init hochohmige Eingänge).
 - **Freilaufdiode zwingend** je Spule (z. B. UF4007/1N4007, Kathode an +24 V, Anode an Drain) – schützt den IRL540 vor der Induktionsspannung beim Abschalten.
 
@@ -310,10 +311,10 @@ Alle SPI-Bausteine arbeiten im **SPI-Mode 0** (CPOL=0, CPHA=0).
 
 **SPI2 – SD-Karte (eigener Host):** dediziert, damit das Lesen der Audio-Files das Display-/Kontakt-Timing nicht blockiert. Eigene MISO (GPIO48), CS (GPIO1).
 
-**SPI3 – MAX7219 + MCP23S17 (gemeinsamer Host):** SCLK (GPIO11) und MOSI (GPIO13) sind geteilt; je eigene Auswahlleitung:
-- **MCP23S17**: echtes `/CS` (GPIO16). Reagiert nur bei aktivem CS.
-- **MAX7219**: `LOAD` (GPIO15). Schiebt bei jedem CLK, übernimmt aber erst mit steigender `LOAD`-Flanke.
-- **MISO** (GPIO14): nur der MCP23S17 treibt MISO (und nur bei aktivem CS). Der MAX7219-`DOUT` wird **nicht** auf den ESP-MISO geführt → keine Bus-Kollision.
+**SPI3 – MAX7219 + MCP23S17 (gemeinsamer Host):** SCLK (GPIO17) und MOSI (GPIO8) sind geteilt; je eigene Auswahlleitung:
+- **MCP23S17**: echtes `/CS` (GPIO15). Reagiert nur bei aktivem CS.
+- **MAX7219**: `LOAD` (GPIO18). Schiebt bei jedem CLK, übernimmt aber erst mit steigender `LOAD`-Flanke.
+- **MISO** (GPIO7): nur der MCP23S17 treibt MISO (und nur bei aktivem CS). Der MAX7219-`DOUT` wird **nicht** auf den ESP-MISO geführt → keine Bus-Kollision.
 
 **Lampen (74HC595) – eigene IOs:** vollständig vom SPI3-Bus entkoppelt. Es wird **kein** Fremd-Takt in die Kaskade eingeschoben; ein `RCLK`-Puls nach dem vollständigen 32-Bit-Frame macht das Muster sichtbar.
 
@@ -328,7 +329,7 @@ Definierte, ungefährliche Zustände von Power-on bis Firmware-Init:
 | Element | Maßnahme | Zustand beim Boot |
 |---------|----------|-------------------|
 | Lampen | 2N7002 sperrt (Gate-Pulldown) → 595-`/OE` per Pull-up auf 5 V → Ausgänge hochohmig + Gate-Pulldowns | **alle aus** |
-| Spulen | IRL540-Gate-Pulldowns; ESP-Ausgänge (21/47) nach Reset hochohmig | **alle aus** |
+| Spulen | IRL540-Gate-Pulldowns; ESP-Ausgänge (12/11) nach Reset hochohmig | **alle aus** |
 | Display | MAX7219 startet im Shutdown (Datasheet) | **dunkel** |
 | MCP | `/RESET` fest auf 3,3 V; Register-Defaults = alle Pins Eingang | keine ungewollten Ausgänge |
 | Sound | I²S-Pins vor Init hochohmig; MAX98357A liefert ohne Takt kein Signal | **still** |
@@ -342,11 +343,13 @@ Definierte, ungefährliche Zustände von Power-on bis Firmware-Init:
 2. **Freilaufdioden** an beiden Spulen nicht vergessen (24 V, induktiv).
 3. **IRL540 real prüfen:** Spulenstrom messen und gegen die Transfer-Kennlinie bei V_GS = 5 V gegenchecken. Bei hohen Strömen ggf. auf einen MOSFET mit niedrigerem R_DS(on) bei 5 V wechseln.
 4. **Entkopplung:** je IC 100 nF nahe an VCC/VDD; zusätzlich Elkos an den 5-V- und 24-V-Rails. Getrennte GND-Führung (Leistungs-GND der Lampen/Spulen **und** Audio-GND sternförmig zum Logik-GND).
-5. **Reserve:** am ESP **0** (alle 12 freien Pins belegt), am MCP23S17 **2** Eingänge frei (GPB6/7).
-6. **DIP-Multiplexing prüfen:** DIP1-3 liegen auf den I²S-Leitungen (3/9/10), freigegeben über GPIO12. Die DIPs nur einlesen, wenn I²S ruht (z. B. beim Start); der DIP-Puffer muss im I²S-Betrieb sicher **hochohmig** sein, damit er die Audio-Leitungen nicht belastet.
-7. **595-`/OE` invertiert:** Firmware beachten – GPIO18 = HIGH schaltet Lampen ein (2N7002, siehe 6.1).
-8. **Kontakte physisch:** Endgültige Pin-Zuordnung der Kontakte auf die Steckerleisten in der Verdrahtungsdoku festlegen.
-9. **Audio:** SD-Karten-Slot, MAX98357A-Modul (Gain/Kanal per Widerstand) und Lautsprecher einplanen; Details in Abschnitt 13.
+5. **Reserve:** am ESP **4** (GPIO 39–42, JTAG-Pins – frei nutzbar, solange Konsole/Debugger über USB laufen), am MCP23S17 **2** Eingänge frei (GPB6/7).
+6. **DIP-Multiplexing prüfen:** DIP1-3 liegen auf den I²S-Leitungen (47/21/14), freigegeben über GPIO13. Die DIPs nur einlesen, wenn I²S ruht (z. B. beim Start); der DIP-Puffer muss im I²S-Betrieb sicher **hochohmig** sein, damit er die Audio-Leitungen nicht belastet.
+7. **DIP-Puffer an 3,3 V betreiben** – die DIP-Leitungen treiben direkt in den ESP (47/21/14), und der S3 ist **nicht 5-V-tolerant**. Ein Puffer am 5-V-Rail würde die Pins zerstören. Beim Layout festlegen und prüfen.
+8. **Pulldown an GPIO3 (595-`SER`)** – GPIO3 ist Strapping-Pin (JTAG-Quellwahl) und floatet beim Boot. Ein 10-kΩ-Pulldown definiert gleichzeitig den Strapping-Zustand und den `SER`-Eingang des 74HCT541. Unkritisch (das Boot-Blanking über `/OE` hält die Lampen ohnehin aus), aber billige Absicherung.
+9. **595-`/OE` invertiert:** Firmware beachten – GPIO16 = HIGH schaltet Lampen ein (2N7002, siehe 6.1).
+10. **Kontakte physisch:** Endgültige Pin-Zuordnung der Kontakte auf die Steckerleisten in der Verdrahtungsdoku festlegen.
+11. **Audio:** SD-Karten-Slot, MAX98357A-Modul (Gain/Kanal per Widerstand) und Lautsprecher einplanen; Details in Abschnitt 13.
 
 ---
 
@@ -362,7 +365,7 @@ SD-Karte (WAV) ──SPI2──► ESP32-S3 ──I²S (LRC/BCLK/DIN)──► M
 
 ### 13.1 MAX98357A (I²S)
 
-- **Eingänge:** `LRC` (Word-Select, GPIO3), `BCLK` (Bit-Clock, GPIO9), `DIN` (Daten, GPIO10).
+- **Eingänge:** `LRC` (Word-Select, GPIO47), `BCLK` (Bit-Clock, GPIO21), `DIN` (Daten, GPIO14).
 - **Versorgung:** 2,5–5,5 V; für mehr Ausgangsleistung am **5-V-Rail** betreiben (bis ~3 W an 4 Ω).
 - **Ausgang:** Brücken-Endstufe direkt an den Lautsprecher – **kein** Koppelkondensator nötig.
 - **`SD_MODE`-Pin:** per Widerstand konfiguriert → Kanalwahl / Shutdown; für Mono (L+R)/2 den vom Modul vorgegebenen Wert nutzen.
@@ -376,7 +379,9 @@ SD-Karte (WAV) ──SPI2──► ESP32-S3 ──I²S (LRC/BCLK/DIN)──► M
 
 ### 13.3 DIP-Schalter (gemultiplext)
 
-Drei DIP-Schalter (DIP1-3) teilen sich die I²S-Leitungen (GPIO3/9/10). Ein Puffer/Tri-State, freigegeben über **GPIO12 (READ_DIP)**, legt die DIP-Zustände nur **auf Anforderung** auf diese Leitungen – typischerweise beim Start, bevor I²S aktiv ist. Im laufenden Audio-Betrieb ist der Puffer hochohmig.
+Drei DIP-Schalter (DIP1-3) teilen sich die I²S-Leitungen (GPIO47/21/14). Ein Puffer/Tri-State, freigegeben über **GPIO13 (READ_DIP)**, legt die DIP-Zustände nur **auf Anforderung** auf diese Leitungen – typischerweise beim Start, bevor I²S aktiv ist. Im laufenden Audio-Betrieb ist der Puffer hochohmig.
+
+> **Wichtig:** Der DIP-Puffer muss aus **3,3 V** versorgt werden – er treibt direkt auf ESP-Pins, und der S3 ist nicht 5-V-tolerant (siehe Abschnitt 12, Punkt 7).
 
 **Firmware:** Die zentralen Pin-Zuweisungen stehen in `gpiodefs.h` (I²S, SD, Taster/DIP). Die S3-Audiokette (ESP-IDF: I²S-Treiber + FATFS/SD) wird als zweiter Schritt aufgesetzt; das alte LEDC-Testprojekt unter `firmware/` bleibt vorerst als Referenz bestehen.
 

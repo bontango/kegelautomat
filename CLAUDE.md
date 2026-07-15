@@ -22,20 +22,21 @@ den originalen Spielablauf nach. Aktuell: **Hardware-/Platinen-Entwurf**.
 - **ESP32-S3-WROOM-1-N16R8** als Master (3,3 V). Nutzbare GPIOs: 0–21, 38–48.
 - **Zwei SPI-Busse (Mode 0):**
   - **SPI2** = SD-Kartenleser (MISO 48, MOSI 2, CLK 38, CS 1) — Audio, entkoppelt.
-  - **SPI3** = MAX7219 + MCP23S17 gemeinsam (SCLK 11, MOSI 13, MISO 14; CS_MAX 15,
-    CS_MCP 16, MCP-INT 17 gespiegelt). Nur der MCP nutzt MISO.
-- **I²S:** MAX98357A (LRC 3, BCLK 9, DIN 10). Diese 3 Pins doppeln als DIP1-3, freigegeben via GPIO12.
+  - **SPI3** = MAX7219 + MCP23S17 gemeinsam (SCLK 17, MOSI 8, MISO 7; CS_MAX 18,
+    CS_MCP 15, MCP-INT 6 gespiegelt). Nur der MCP nutzt MISO.
+- **I²S:** MAX98357A (LRC 47, BCLK 21, DIN 14). Diese 3 Pins doppeln als DIP1-3, freigegeben via GPIO13.
+  DIP-Puffer **muss an 3,3 V** hängen (S3 nicht 5-V-tolerant).
 - **Lampen:** 4× 74HC595 (Kaskade, 32 Bit, 30 genutzt) @ 5 V → je 1 Logic-Level-MOSFET.
-  An **dedizierten IOs** (SER 6, SRCLK 7, RCLK 8); **nicht** am SPI-Bus.
+  An **dedizierten IOs** (SER 3, SRCLK 10, RCLK 9); **nicht** am SPI-Bus.
 - **Displays:** MAX7219 (8 Digits common cathode) @ 5 V, an SPI3.
 - **Kontakte:** MCP23S17 @ **3,3 V**, alle 16 IO als Eingänge (14 belegt + 2 Reserve),
   Pull-up + Interrupt-on-Change, INTA/INTB **gespiegelt** → 1 INT-Leitung.
-- **Spulen:** 2× direkt vom ESP (GPIO 21/47) → 74HCT541 → IRL540 low-side.
+- **Spulen:** 2× direkt vom ESP (GPIO 12/11) → 74HCT541 → IRL540 low-side.
 - **74HCT541** = Pegelwandler 3,3 V→5 V, **1 IC, 8/8 Kanäle:** SPI3-SCLK, SPI3-MOSI, MAX-LOAD,
   595-SER/-SRCLK/-RCLK + 2× Spulen-Gate.
-- **595-/OE** (GPIO18) läuft **nicht** über den 541, sondern über einen **2N7002** (Open-Drain,
-  Pull-up 5 V): Boot-Blanking + Dimmen bleiben, **invertiert → GPIO18 HIGH = Lampen an**.
-- Bedienung: ADJUST = GPIO4, SET = GPIO5, DIP-Read-Enable = GPIO12.
+- **595-/OE** (GPIO16) läuft **nicht** über den 541, sondern über einen **2N7002** (Open-Drain,
+  Pull-up 5 V): Boot-Blanking + Dimmen bleiben, **invertiert → GPIO16 HIGH = Lampen an**.
+- Bedienung: ADJUST = GPIO4, SET = GPIO5, DIP-Read-Enable = GPIO13.
 
 ### Warum diese Aufteilung (wichtig, nicht wegoptimieren)
 - MAX7219 V_IH = 3,5 V und 74HC595@5V V_IH ≈ 3,5 V > 3,3 V → **74HCT541 nötig**.
@@ -47,10 +48,10 @@ den originalen Spielablauf nach. Aktuell: **Hardware-/Platinen-Entwurf**.
 ## ESP32-S3 GPIO-Beschränkungen (beachten!)
 - **GPIO33–37 = Octal-PSRAM (N16R8) → nie verwenden.** GPIO26–32 = SPI-Flash (n/a).
 - Strapping: **GPIO0, 3, 45, 46** – beim Boot in definiertem Zustand lassen. GPIO0 = BOOT-Taster.
-- GPIO3 (Strapping JTAG-Quellwahl) hier als I²S-LRC – unkritisch bei USB-JTAG.
+- GPIO3 (Strapping JTAG-Quellwahl) hier als 74HC595-SER, reiner Ausgang – unkritisch bei USB-JTAG.
 - **GPIO19/20 = USB** (Konsole/Flash via USB-Serial/JTAG), **GPIO43/44 = UART0** (Debug) → frei halten.
 - GPIO 22–25 existieren nicht; keine Input-only-Pins.
-- **0 ESP-Reserve** (alle 12 zuvor freien Pins belegt); 2 Reserve am MCP.
+- **4 ESP-Reserve: GPIO 39–42** (JTAG-Pins, frei solange Konsole/Debug über USB); 2 Reserve am MCP.
 - Portbelegung im Detail: siehe `Steuerplatine_Doku.md`, Abschnitt 5.
 
 ## Dateien

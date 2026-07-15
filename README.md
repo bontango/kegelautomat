@@ -34,8 +34,10 @@ Ausführliche Beschreibung, Portbelegung und Blockdiagramm:
 **[`Steuerplatine_Doku.md`](Steuerplatine_Doku.md)**.
 
 ## Status
-Hardware-/Platinen-Entwurf (Umstieg C3 → S3). Firmware (C, ESP-IDF) folgt als zweiter
-Schritt; ein flashbares LEDC-Sound-Testprojekt aus dem C3-Entwurf liegt noch unter `firmware/`.
+**Layout der Prototyp-Platine fertig** (Stand 2026-07-15); die Portbelegung ist damit
+festgezurrt – siehe [`gpiodefs.h`](gpiodefs.h) und Abschnitt 5 der Doku. Firmware (C, ESP-IDF)
+folgt als zweiter Schritt; ein flashbares LEDC-Sound-Testprojekt aus dem C3-Entwurf liegt
+noch unter `firmware/`.
 
 ## Repository-Inhalt
 - [`Steuerplatine_Doku.md`](Steuerplatine_Doku.md) – vollständige technische Doku

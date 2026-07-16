@@ -46,12 +46,15 @@
 #define PIN_NUM_CLK        38
 #define PIN_NUM_CS         1
 
-// 6 Digital Pins on SPI3 host: MAX7219 display + MCP23S17 contacts
-// SCLK/MOSI drive the 74HCT541 (-> MAX7219, 5 V) AND the MCP directly (3.3 V)
+// 6 Digital Pins on SPI3 host: MAX7221 display + MCP23S17 contacts
+// SCLK/MOSI drive the 74HCT541 (-> MAX7221, 5 V) AND the MCP directly (3.3 V)
+// Display = multiplexed 8x8 matrix (8 SEG + 8 DIG) over a ~1 m 34-pin ribbon.
+// MAX7221 (not 7219): real CS + slew-limited segment drivers -> long-cable friendly.
+// Add 68-100 ohm series R at the 541 outputs on CLK/DIN/CS; run this device at ~1 MHz.
 #define SPI3_SCLK_PIN      17
 #define SPI3_MOSI_PIN      8
 #define SPI3_MISO_PIN      7   // only the MCP23S17 drives MISO
-#define MAX7219_CS_PIN     18   // = LOAD (displays.c)
+#define MAX7221_CS_PIN     18   // = CS/LOAD pin, active-LOW latch (displays.c)
 #define MCP23S17_CS_PIN    15   // (contacts.c)
 #define MCP23S17_INT_PIN   6  // INTA/INTB mirrored -> single INT line
 

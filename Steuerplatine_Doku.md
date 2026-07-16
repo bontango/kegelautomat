@@ -2,7 +2,7 @@
 
 **Projekt:** Nachbau der Steuerung eines Wandkegelautomaten „Bowling de Luxe / Mini Sport Kegler" (Fa. Dibisch, ~1970er)
 **Zentrale Steuerung:** ESP32-S3-WROOM-1-N16R8
-**Stand:** 2026-07-15 (Portbelegung an das fertige Prototyp-Layout angepasst)
+**Stand:** 2026-07-16 (Display als MAX7221 festgelegt – Variante B, Treiber auf der Hauptplatine)
 
 > **Wechsel C3 → S3:** Der ursprüngliche Entwurf nutzte einen ESP32-C3 Super Mini mit
 > LEDC-PWM-Sound. Weil die Audioqualität nicht überzeugte, läuft die Steuerung jetzt auf
@@ -24,7 +24,7 @@ Der Automat ist ein Wandgerät, bei dem mit einem Hebel Kugeln „eingeschossen"
 | 8×    | 7-Segment-Displays (Punkte) | **common cathode** |
 | +     | **Sound** (Zusatz, kein Originalteil) | Audio-Files von SD → **MAX98357A (I²S)** → Lautsprecher |
 
-**Ergebnis der Verifikation:** Alle Komponenten sind mit dem ESP32-S3 steuerbar. Es gibt **zwei getrennte SPI-Busse** – **SPI2** für den SD-Kartenleser (Audio), **SPI3** für MAX7219 (Displays) + MCP23S17 (Kontakte) – dazu einen **I²S**-Zweig für den Ton und **dedizierte IOs** für die Lampen-Kaskade. Ein **74HCT541** pegelt die 3,3-V-Ausgänge auf 5 V für die 5-V-Bausteine. Details und die elektrischen Fallstricke (mit Lösung) siehe Abschnitt 3.
+**Ergebnis der Verifikation:** Alle Komponenten sind mit dem ESP32-S3 steuerbar. Es gibt **zwei getrennte SPI-Busse** – **SPI2** für den SD-Kartenleser (Audio), **SPI3** für MAX7221 (Displays) + MCP23S17 (Kontakte) – dazu einen **I²S**-Zweig für den Ton und **dedizierte IOs** für die Lampen-Kaskade. Ein **74HCT541** pegelt die 3,3-V-Ausgänge auf 5 V für die 5-V-Bausteine. Details und die elektrischen Fallstricke (mit Lösung) siehe Abschnitt 3.
 
 ---
 
@@ -33,7 +33,7 @@ Der Automat ist ein Wandgerät, bei dem mit einem Hebel Kugeln „eingeschossen"
 Der ESP32-S3 ist Master aller Busse:
 
 - **SPI2** (Host): SD-Kartenleser – hoher Durchsatz für Audio-Files, entkoppelt vom Rest.
-- **SPI3** (Host): MAX7219 + MCP23S17 an einem gemeinsamen Bus (SCLK/MOSI geteilt), je eigene CS-Leitung; nur der MCP nutzt **MISO**.
+- **SPI3** (Host): MAX7221 + MCP23S17 an einem gemeinsamen Bus (SCLK/MOSI geteilt), je eigene CS-Leitung; nur der MCP nutzt **MISO**.
 - **I²S**: MAX98357A (LRC, BCLK, DIN).
 - **Dedizierte IOs**: 74HC595-Kaskade (SER, SRCLK, RCLK) – vom Display-Bus entkoppelt; `/OE` über einen 2N7002.
 - **2 direkte GPIOs**: Spulen (→ 74HCT541 → IRL540).
@@ -61,7 +61,7 @@ graph LR
 
     subgraph HV["5-V-Domäne"]
         SR["4× 74HC595<br/>Kaskade, 32 Bit"]
-        MAX["MAX7219<br/>Display-Treiber"]
+        MAX["MAX7221<br/>Display-Treiber"]
     end
 
     ESP -- "SPI2: SCLK,MOSI,MISO,CS" --> SD
@@ -73,17 +73,17 @@ graph LR
     ESP -- "GPIO16 (3,3 V)" --> Q
     ESP -- "2× Spule (3,3 V)" --> HCT
 
-    HCT -- "CLK,DIN,LOAD (5 V)" --> MAX
+    HCT -- "CLK,DIN,CS (5 V, +Serien-R)" --> MAX
     HCT -- "SER,SRCLK,RCLK (5 V)" --> SR
     Q -- "/OE (5 V)" --> SR
     HCT -- "2× Gate (5 V)" --> IRL["2× IRL540<br/>Spulen 24 V"]
 
     SR --> LAMPS["32× N-MOSFET<br/>→ 30 Lampen 5 V"]
-    MAX --> DISP["8× 7-Segment<br/>common cathode"]
+    MAX -- "8 SEG + 8 DIG (34-pol. Ribbon ~1 m)" --> DISP["8× 7-Segment<br/>common cathode<br/>gemultiplexte 8×8-Matrix"]
     MCP --> CONT["16 Kontakte gegen GND<br/>(2 Reserve)"]
 ```
 
-**Warum SPI3 gemeinsam funktioniert:** Nur der Baustein, dessen CS/LOAD aktiviert wird, übernimmt die Daten. SCK/MOSI treiben parallel den 74HCT541-Eingang (→ MAX7219, 5 V) **und** direkt den MCP23S17 (3,3 V) – ein 3,3-V-Ausgang auf zwei 3,3-V-Lasten, unkritisch. Die Lampen-Kaskade hängt an eigenen IOs und wird davon gar nicht berührt.
+**Warum SPI3 gemeinsam funktioniert:** Nur der Baustein, dessen CS aktiviert wird, übernimmt die Daten – und der MAX7221 schiebt (anders als der MAX7219) nur bei aktivem CS. SCK/MOSI treiben parallel den 74HCT541-Eingang (→ MAX7221, 5 V) **und** direkt den MCP23S17 (3,3 V) – ein 3,3-V-Ausgang auf zwei 3,3-V-Lasten, unkritisch. Die Lampen-Kaskade hängt an eigenen IOs und wird davon gar nicht berührt.
 
 ---
 
@@ -94,7 +94,7 @@ Die Platine hat **drei Spannungsdomänen**:
 | Domäne | Versorgt | Anmerkung |
 |--------|----------|-----------|
 | 3,3 V  | ESP32-S3, MCP23S17, MAX98357A-Logik | Logik-Master |
-| 5 V    | 74HCT541, 4×74HC595, MAX7219, Lampen, MAX98357A-Endstufe | Treiber, Anzeige, Ton |
+| 5 V    | 74HCT541, 4×74HC595, MAX7221, Lampen, MAX98357A-Endstufe | Treiber, Anzeige, Ton |
 | 24 V   | Spulen (über IRL540) | nur Leistungspfad |
 
 ### 3.1 Das Kernproblem: 3,3-V-Logik an 5-V-Bausteinen
@@ -103,7 +103,7 @@ Der ESP32-S3 gibt an seinen GPIOs nur **3,3 V** aus. Mehrere 5-V-Bausteine verla
 
 | Baustein | V_IH (min, garantiert) | Bei 3,3 V vom ESP? | Quelle |
 |----------|------------------------|--------------------|--------|
-| **MAX7219** (V+ = 5 V) | **3,5 V** | ✗ unter Schwelle (out of spec) | `max7219-max7221.pdf`, Electrical Characteristics |
+| **MAX7221** (V+ = 5 V) | **3,5 V** | ✗ unter Schwelle (out of spec) | `max7219-max7221.pdf`, Electrical Characteristics (7219/7221 identisch) |
 | **74HC595** (VCC = 5 V) | ≈ **3,5 V** (0,7·VCC) | ✗ grenzwertig | 74HC595 Standard-Datasheet |
 | **MCP23S17** (VDD = 5 V) | **0,8·VDD = 4,0 V** | ✗ unsicher | `MCP23S17_MIC.pdf`, DC Characteristics (D041) |
 | **MCP23S17** (VDD = 3,3 V) | **0,8·VDD = 2,64 V** | ✓ sicher | ″ |
@@ -112,7 +112,7 @@ Der ESP32-S3 gibt an seinen GPIOs nur **3,3 V** aus. Mehrere 5-V-Bausteine verla
 
 1. **MCP23S17 mit 3,3 V betreiben.** Dann liegt V_IH bei 2,64 V → die 3,3-V-SPI-Signale des ESP werden sicher erkannt. Die SPI-Leitungen zum MCP gehen **direkt** (ungepuffert), MISO/INT kommen mit 3,3 V zurück (ESP-konform). Betriebsspannungsbereich des MCP23S17: 1,8–5,5 V (Datasheet), 3,3 V ist zulässig.
 
-2. **74HCT541 als Pegelwandler 3,3 V → 5 V** für alle Leitungen, die in die 5-V-Bausteine gehen. Der HCT-Eingang erkennt 3,3 V sicher als High (V_IH,HCT = 2,0 V) und treibt am Ausgang volle 5 V. Das löst **MAX7219** und **74HC595** in einem Rutsch.
+2. **74HCT541 als Pegelwandler 3,3 V → 5 V** für alle Leitungen, die in die 5-V-Bausteine gehen. Der HCT-Eingang erkennt 3,3 V sicher als High (V_IH,HCT = 2,0 V) und treibt am Ausgang volle 5 V. Das löst **MAX7221** und **74HC595** in einem Rutsch.
 
 3. **595 mit 5 V betreiben** – dadurch liefern die 595-Ausgänge 5 V an die Lampen-MOSFET-Gates (sauberes Durchschalten der Logic-Level-MOSFETs).
 
@@ -120,7 +120,7 @@ Der ESP32-S3 gibt an seinen GPIOs nur **3,3 V** aus. Mehrere 5-V-Bausteine verla
 
 5. **595-`/OE` über einen 2N7002 (Open-Drain)** statt über den 74HCT541 – so bleibt der Pegelwandler bei **einem** IC. Details in Abschnitt 6.1.
 
-> **Ergebnis:** Der eine 74HCT541 ist mit **8 von 8 Kanälen** belegt: SPI3-SCLK, SPI3-MOSI, MAX-LOAD, 595-SER/-SRCLK/-RCLK + 2 Spulen-Gate-Signale. `/OE` läuft separat über den 2N7002. Siehe Abschnitt 6.
+> **Ergebnis:** Der eine 74HCT541 ist mit **8 von 8 Kanälen** belegt: SPI3-SCLK, SPI3-MOSI, MAX-CS, 595-SER/-SRCLK/-RCLK + 2 Spulen-Gate-Signale. `/OE` läuft separat über den 2N7002. Siehe Abschnitt 6.
 
 ---
 
@@ -163,7 +163,7 @@ Das Modul **ESP32-S3-WROOM-1-N16R8** (16 MB Flash, **8 MB Octal-PSRAM**) führt 
 | **17** | SPI3 **SCLK** | OUT | → 74HCT541 (→MAX) **und** direkt → MCP | HW-SPI3-Takt |
 | **8**  | SPI3 **MOSI** | OUT | → 74HCT541 (→MAX) **und** direkt → MCP | |
 | **7**  | SPI3 **MISO** | IN | ← MCP23S17 SO (3,3 V) | nur MCP treibt MISO |
-| **18** | **MAX7219 LOAD** (CS) | OUT | → 74HCT541 → MAX7219 | Display-Latch |
+| **18** | **MAX7221 CS** (= LOAD-Pin) | OUT | → 74HCT541 (+Serien-R) → MAX7221 | aktiv-LOW; Latch mit steigender CS-Flanke |
 | **15** | **MCP23S17 /CS** | OUT | → MCP23S17 CS (3,3 V) | Pull-up nach 3,3 V |
 | **6**  | **MCP23S17 INT** | IN | ← MCP INTA/INTB (gespiegelt) | 1 Interrupt-Leitung |
 | **3**  | **74HC595 SER** | OUT | → 74HCT541 → 595 (Daten) | dedizierte Lampen-IOs; Strapping-Pin, Pulldown empfohlen |
@@ -193,9 +193,9 @@ Oktal-Buffer, nicht invertierend. Eingänge 3,3-V-tauglich (HCT), Ausgänge trei
 
 | Kanal | Eingang (3,3 V) von | Ausgang (5 V) nach | Funktion |
 |:-----:|---------------------|--------------------|----------|
-| 1 | ESP GPIO17 (SPI3-SCLK) | MAX7219 CLK | Display-Takt |
-| 2 | ESP GPIO8 (SPI3-MOSI) | MAX7219 DIN | Display-Daten |
-| 3 | ESP GPIO18 (LOAD) | MAX7219 LOAD | Display-Latch |
+| 1 | ESP GPIO17 (SPI3-SCLK) | MAX7221 CLK | Display-Takt (Serien-R am Ausgang, siehe Abschnitt 8) |
+| 2 | ESP GPIO8 (SPI3-MOSI) | MAX7221 DIN | Display-Daten (Serien-R) |
+| 3 | ESP GPIO18 (CS) | MAX7221 CS | Display-Latch / Chip-Select (Serien-R) |
 | 4 | ESP GPIO3 (SER) | 595 SER | Lampen-Daten |
 | 5 | ESP GPIO10 (SRCLK) | 595 SRCLK | Lampen-Schiebetakt |
 | 6 | ESP GPIO9 (RCLK) | 595 RCLK | Lampen-Latch |
@@ -256,23 +256,65 @@ ESP GPIO16 ──[ 10k Pulldown → GND ]
 
 ---
 
-## 8. MAX7219 – Displays (8× 7-Segment, common cathode)
+## 8. MAX7221 – Displays (8× 7-Segment, common cathode, gemultiplext)
 
-Der MAX7219 ist ein serieller Anzeigentreiber für bis zu **8 Digits common cathode** – passt exakt zu den 8 Punktedisplays. Versorgung **V+ = 5 V** (Bereich 4,0–5,5 V). Angebunden am **SPI3-Bus** (gemeinsam mit dem MCP23S17, eigene LOAD-Leitung).
+### 8.1 Die vorhandene Display-Architektur (aus `datasheets/Display.jpg`)
 
-**Signale (alle 5 V, aus dem 74HCT541):**
+Die 8 Ziffern sind **fest als gemultiplexte 8×8-Matrix** verdrahtet – nicht statisch. Das gibt der Original-Stecker (`K6`, 34-poliger Wannenstecker) vor:
+
+| Ribbon-Pins | Signal | Bedeutung |
+|-------------|--------|-----------|
+| 19, 21, 23, 25, 27, 29, 31, 33 (ungerade) | `a b c d e f g dP2` | **8 Segmentleitungen**, über alle Ziffern gemeinsam (Segment-Bus) |
+| 2, 4, 6, 8, 10, 12, 14, 16 (gerade) | Bip 1er/10er · Credit 1er/10er · Score 1er/10er/100er/1000er | **8 Digit-Auswahlleitungen** (je ein Common pro Ziffer) |
+| dazwischenliegende Pins | GND / Rückleiter | Signal–GND–Signal–GND verschachtelt |
+
+- Die 8 Ziffern liegen physisch auf **3 Platinen** (2× Bip, 2× Credit, 4× Score = **2×2 + 1×4**), alle über **ein ~1 m langes 34-poliges Flachbandkabel** angebunden.
+- Segmente über alle Ziffern zusammengefasst → **klassische Multiplex-Matrix** (8 SEG + 8 DIG) = exakt die MAX7221-Topologie. Statischer Betrieb wäre für das lange Kabel elektrisch besser, ist mit dieser Verdrahtung aber **nicht** möglich (bräuchte 64 Einzel-Segmentleitungen und neue Display-Platinen).
+- **Wichtig:** Die verschachtelten Masse-Rückleiter des 34-poligen Bands sind kein Zufall – sie geben dem Flachband ~100–130 Ω Wellenwiderstand und machen Multiplex über ~1 m erst gutmütig. **Beim Neuaufbau beibehalten.**
+
+### 8.2 Warum MAX7221 statt MAX7219 (Variante B)
+
+Der Treiber bleibt auf der **Hauptplatine**, die 16 Matrixleitungen laufen über die ~1 m des Bands. Weil das Multiplexen über diese Länge das kritische Thema ist (Ghosting/EMV), wird bewusst der **MAX7221** statt des sonst gleichwertigen MAX7219 eingesetzt:
+
+- **Slew-rate-begrenzte Segmenttreiber** → deutlich sanftere Flanken auf den 8 langen Segmentleitungen → weniger Ringing und EMV. (Der MAX7219 treibt die Segmente ungebremst.)
+- **Echtes SPI-Chip-Select:** Der MAX7221 schiebt Daten **nur bei aktivem (LOW) CS**. Damit taktet ein Kontakt-Poll des MCP23S17 den MAX **nicht** mit (kein Frame-Versatz durch Störflanken, keine dauernd sendende 1-m-„Antenne" – beim MAX7219 wäre das ein Restproblem).
+- **Registerkompatibel** zum MAX7219 → **Firmware praktisch identisch**. Einziger Unterschied im Handling: CS zwischen den Frames sauber HIGH führen (macht man ohnehin).
+
+### 8.3 Signale (alle 5 V, aus dem 74HCT541 – je mit Serien-R)
+
 - `DIN` ← SPI3-MOSI (GPIO8)
 - `CLK` ← SPI3-SCLK (GPIO17)
-- `LOAD` ← GPIO18
+- `CS`  ← GPIO18 (= LOAD-Pin des Bausteins)
+- `DOUT` → **nicht** an den ESP-MISO (keine Bus-Kollision mit dem MCP, siehe Abschnitt 10)
 
-**Beschaltung / Konfiguration:**
-- **RSET** zwischen V+ und ISET setzt den Segment-Spitzenstrom; Minimum 9,53 kΩ (≈ 40 mA). Wert nach gewünschter Helligkeit / Display-Datenblatt wählen.
+### 8.4 Maßnahmen für das ~1-m-Kabel (Variante B)
+
+1. **Serien-/Source-Termination:** 68–100 Ω direkt am **74HCT541-Ausgang** in `CLK`, `DIN` und `CS` (Widerstand am Treiber-Pin, nicht am MAX). **Auf allen drei Leitungen gleicher Wert**, damit kein Versatz zwischen Takt und Daten entsteht. Timing bleibt entspannt (100 Ω gegen ~30 pF ≈ 3 ns; die MAX-Eingänge haben 1 V Hysterese).
+2. **SPI-Takt für den MAX auf ~1 MHz** (in ESP-IDF pro Device über `clock_speed_hz` im `spi_device_interface_config_t`). Für 8 Digits reicht das dicke; langsamere Flanken über 1 m sind ein Geschenk. Der MCP23S17 darf am selben SPI3-Bus weiter mit 8–10 MHz laufen – der Treiber schaltet die Rate pro Transaktion um.
+3. **RSET eher moderat** wählen: kleinerer Segment-Spitzenstrom = weniger Umladung auf den langen Adern = weniger Ghosting.
+4. **Abblockung direkt am MAX7221:** 10 µF Elko **+** 100 nF Keramik an V+/GND (die Digit-Treiber ziehen im Multiplex kräftige Spitzen – das ist die eigentliche Störquelle). **Beide GND-Pins (4 und 9) anschließen** (wird gern übersehen), durchgehende Massefläche unter den Signalleitungen.
+5. **Masse-Verschachtelung des 34-poligen Bands beibehalten** (Signal–GND–Signal–GND, siehe 8.1).
+6. **Original-„Widerstände"-Platine entfernen/überbrücken:** Der MAX7221 ist eine **Konstantstromquelle** (Strom kommt aus RSET). Serienwiderstände in den SEG-/DIG-Leitungen fressen nur die ohnehin knappe Spannungsreserve bei V+ = 5 V – dort **keine** Widerstände.
+
+### 8.5 Konfiguration (identisch zum MAX7219)
+
+- **RSET** (V+ → ISET) setzt den Segment-**Spitzenstrom** (I_SEG ≈ 100 × I_ISET; **nie < 9,53 kΩ**). Für den SC08-11EWA (V_F ≈ 2 V) liefert Datenblatt-Tabelle 11 **RSET ≈ 11,8 kΩ → 40 mA** (= vom MAX empfohlenes Maximum). **Bestückungswert 12 kΩ** (0402, ~2 mW Verlust). Ein 10 kΩ träfe bei diesem niedrigen V_F ~45 mA und läge damit knapp über den 40 mA – **12 kΩ ist sauberer**. Feineinstellung der Helligkeit dann über das Intensity-Register in Software.
 - **Scan-Limit-Register** = 7 (→ 8 Digits aktiv).
-- **Decode-Mode**: Code-B für reine Ziffernanzeige, oder No-Decode für individuelle Segmentsteuerung.
+- **Decode-Mode**: Code-B für reine Ziffernanzeige, oder No-Decode für individuelle Segmentsteuerung (das `dP2`-Segment ist das 8. Bit pro Ziffer).
 - **Intensity-Register**: digitale Helligkeit (16 Stufen).
 - **Shutdown-Register**: nach Power-up ist die Anzeige geblankt – im Setup aktiv schalten.
 
-**Hinweis Logikpegel:** Die 5-V-Ansteuerung über den 74HCT541 stellt sicher, dass die 3,5-V-V_IH-Schwelle des MAX7219 sicher überschritten wird (siehe Abschnitt 3). Ohne den Pegelwandler wäre der Betrieb mit 3,3 V außerhalb der Spezifikation.
+**Hinweis Logikpegel:** Die 5-V-Ansteuerung über den 74HCT541 stellt sicher, dass die 3,5-V-V_IH-Schwelle des MAX7221 (identisch zum MAX7219) sicher überschritten wird (siehe Abschnitt 3). Ohne den Pegelwandler wäre der Betrieb mit 3,3 V außerhalb der Spezifikation.
+
+### 8.6 Display-Baustein Kingbright SC08-11EWA
+
+- 0,8″ Einzeldigit, **common cathode** (lt. Datenblatt bestätigt), **rechter** Dezimalpunkt, Hi-Eff-Rot (627 nm) – passt zum common-cathode-only MAX7221.
+- **V_F = 1,9 V typ / 2,3 V max @ 10 mA**, **ein** LED-Chip pro Segment. Damit hat der MAX7221 bei V+ = 5 V **reichlich Spannungsreserve** (der Baustein ist bis V_LED = 3,5 V charakterisiert) – **kein Headroom-Problem**. (Das wäre nur bei großen 2-Chip-Digits mit ~4 V V_F kritisch geworden.)
+- Grenzwerte je Segment: **30 mA DC, 160 mA Peak** (1/10 Duty, 0,1 ms). Bei RSET = 12 kΩ → ~40 mA Peak, im 1/8-Multiplex ≈ 5 mA Mittel je Segment: ~4× unter der Peak-, ~6× unter der DC-Grenze.
+- **5-V-Strombudget Display:** eine „8." = 8 Segmente × 40 mA = **~320 mA** je aktivem Digit. Da immer nur ein Digit leuchtet (Multiplex), ist das zugleich rund der Mittelwert im Worst Case (alle Digits „8."). Für das 5-V-Netzteil ~350 mA für die Anzeige einplanen (zusätzlich zu Lampen/Audio).
+- Datenblatt: Kingbright SC08-11EWA, Spec DSAP8389 Rev V.1A (2020).
+
+> **Restrisiko & Rückfallebene:** Multiplex über ~1 m kann trotz aller Maßnahmen ein Rest-Ghosting zeigen. Falls es sich im Betrieb zeigt, ist die saubere Lösung (Variante A) den MAX7221 auf eine kleine Platine **ins Display-Gehäuse** zu setzen – dann laufen nur noch `DIN/CLK/CS/5 V/GND` über die 1 m, die 16 Matrixleitungen bleiben kurz. Die Firmware bliebe unverändert.
 
 ---
 
@@ -311,10 +353,10 @@ Alle SPI-Bausteine arbeiten im **SPI-Mode 0** (CPOL=0, CPHA=0).
 
 **SPI2 – SD-Karte (eigener Host):** dediziert, damit das Lesen der Audio-Files das Display-/Kontakt-Timing nicht blockiert. Eigene MISO (GPIO48), CS (GPIO1).
 
-**SPI3 – MAX7219 + MCP23S17 (gemeinsamer Host):** SCLK (GPIO17) und MOSI (GPIO8) sind geteilt; je eigene Auswahlleitung:
+**SPI3 – MAX7221 + MCP23S17 (gemeinsamer Host):** SCLK (GPIO17) und MOSI (GPIO8) sind geteilt; je eigene Auswahlleitung:
 - **MCP23S17**: echtes `/CS` (GPIO15). Reagiert nur bei aktivem CS.
-- **MAX7219**: `LOAD` (GPIO18). Schiebt bei jedem CLK, übernimmt aber erst mit steigender `LOAD`-Flanke.
-- **MISO** (GPIO7): nur der MCP23S17 treibt MISO (und nur bei aktivem CS). Der MAX7219-`DOUT` wird **nicht** auf den ESP-MISO geführt → keine Bus-Kollision.
+- **MAX7221**: `CS` (GPIO18). **Echtes Chip-Select** – schiebt **nur bei aktivem (LOW) CS** und übernimmt mit der steigenden CS-Flanke. Anders als der MAX7219 wird der MAX also von einem MCP-Kontakt-Poll **nicht** mitgetaktet → kein Frame-Versatz, keine Dauer-Aussendung auf dem 1-m-Kabel. Der MAX läuft mit ~1 MHz (langsamer als der MCP), der Treiber stellt die Rate pro Transaktion um.
+- **MISO** (GPIO7): nur der MCP23S17 treibt MISO (und nur bei aktivem CS). Der MAX7221-`DOUT` wird **nicht** auf den ESP-MISO geführt → keine Bus-Kollision.
 
 **Lampen (74HC595) – eigene IOs:** vollständig vom SPI3-Bus entkoppelt. Es wird **kein** Fremd-Takt in die Kaskade eingeschoben; ein `RCLK`-Puls nach dem vollständigen 32-Bit-Frame macht das Muster sichtbar.
 
@@ -330,7 +372,7 @@ Definierte, ungefährliche Zustände von Power-on bis Firmware-Init:
 |---------|----------|-------------------|
 | Lampen | 2N7002 sperrt (Gate-Pulldown) → 595-`/OE` per Pull-up auf 5 V → Ausgänge hochohmig + Gate-Pulldowns | **alle aus** |
 | Spulen | IRL540-Gate-Pulldowns; ESP-Ausgänge (12/11) nach Reset hochohmig | **alle aus** |
-| Display | MAX7219 startet im Shutdown (Datasheet) | **dunkel** |
+| Display | MAX7221 startet im Shutdown (Datasheet) | **dunkel** |
 | MCP | `/RESET` fest auf 3,3 V; Register-Defaults = alle Pins Eingang | keine ungewollten Ausgänge |
 | Sound | I²S-Pins vor Init hochohmig; MAX98357A liefert ohne Takt kein Signal | **still** |
 | Strapping | GPIO0/3/45/46 in definiertem Zustand | normaler Flash-Boot |
@@ -350,6 +392,8 @@ Definierte, ungefährliche Zustände von Power-on bis Firmware-Init:
 9. **595-`/OE` invertiert:** Firmware beachten – GPIO16 = HIGH schaltet Lampen ein (2N7002, siehe 6.1).
 10. **Kontakte physisch:** Endgültige Pin-Zuordnung der Kontakte auf die Steckerleisten in der Verdrahtungsdoku festlegen.
 11. **Audio:** SD-Karten-Slot, MAX98357A-Modul (Gain/Kanal per Widerstand) und Lautsprecher einplanen; Details in Abschnitt 13.
+12. **Display-Kabel (Variante B):** Serien-R (68–100 Ω) an CLK/DIN/CS vorsehen, SPI-Takt des MAX auf ~1 MHz, Abblockung + beide GND-Pins am MAX7221, RSET moderat, Masse-Verschachtelung des 34-poligen Bands beibehalten, Original-„Widerstände"-Platine entfernen (Konstantstromquelle). Falls Rest-Ghosting auftritt → Variante A (MAX7221 ins Display-Gehäuse). Siehe Abschnitt 8.
+13. **Common cathode:** Für den gewählten **SC08-11EWA lt. Datenblatt bestätigt** (Common Cathode, rechter DP) – passt zum MAX7221 (common-cathode-only). Bei abweichenden Digit-Typen vorher gegenprüfen. RSET = **12 kΩ** (nicht 10 kΩ) für ~40 mA bei V_F ≈ 2 V (siehe Abschnitt 8.5/8.6).
 
 ---
 
@@ -393,7 +437,8 @@ Drei DIP-Schalter (DIP1-3) teilen sich die I²S-Leitungen (GPIO47/21/14). Ein Pu
 
 - `Projekt_Kegelautomat.txt` – Projektbeschreibung
 - `datasheets/MCP23S17_MIC.pdf` – DC-Kennwerte (V_IH = 0,8·VDD; Betrieb 1,8–5,5 V; max. 25 mA/Pin)
-- `datasheets/max7219-max7221.pdf` – Electrical Characteristics (V_IH = 3,5 V @ V+ = 5 V; common cathode; 8 Digits)
+- `datasheets/max7219-max7221.pdf` – Electrical Characteristics (V_IH = 3,5 V @ V+ = 5 V; common cathode; 8 Digits). **MAX7221** hier gewählt: echtes SPI-CS + slew-rate-limitierte Segmenttreiber (EMV), sonst registerkompatibel zum MAX7219.
+- `datasheets/Display.jpg` – Original-Display-Verdrahtung: gemultiplexte 8×8-Matrix (8 SEG + 8 DIG), 34-poliger Stecker, 3 Platinen (2×2 + 1×4)
 - `datasheets/esp32-S3-pinout.pdf` – Pinout ESP32-S3-WROOM-1
 - **MAX98357A** (Maxim/Analog Devices) – I²S-Class-D-Amp; Gain/Kanal per Widerstand (Herstellerdatenblatt, nicht mitgeliefert)
 - `datasheets/PCB_Skizze.jpg`, `datasheets/Kegelautomat.jpg` – Layout-Skizze & Automat

@@ -12,7 +12,7 @@ Platine bildet den originalen Spielablauf nach.
 - **30 Lampen** (5 V, low-side) – symbolisieren die Kegel u. a.
 - **Kontakte** (Einzelkontakte gegen GND) – erfasst über MCP23S17, **16 Eingänge (2 Reserve)**
 - **2 Spulen** (24 V) – Münz-Weiche
-- **8× 7-Segment-Displays** (common cathode) – Punkteanzeige
+- **8× 7-Segment-Displays** (common cathode, gemultiplexte 8×8-Matrix, 34-pol. Ribbon ~1 m) – Punkteanzeige
 - **Sound** (Zusatz, kein Originalteil): Audio-Files von SD-Karte über **MAX98357A (I²S)**
 
 ## Hardware-Konzept
@@ -20,7 +20,7 @@ Platine bildet den originalen Spielablauf nach.
 |----------|---------|-----------|
 | **ESP32-S3-WROOM-1-N16R8** | zentrale Steuerung (3,3 V) | — |
 | **4× 74HC595** | 30 Lampen über MOSFETs (Kaskade, 32 Bit, 2 Reserve) | dedizierte IOs, 5 V |
-| **MAX7219** | 8 Displays (common cathode) | SPI3, 5 V |
+| **MAX7221** | 8 Displays (common cathode, gemultiplexte 8×8-Matrix) | SPI3, 5 V |
 | **MCP23S17** | 16 Kontakte (Interrupt, 2 Reserve) | SPI3, 3,3 V |
 | **2× IRL540** | 2 Spulen (24 V, low-side) | ESP-IO → 74HCT541 → Gate |
 | **74HCT541** | Pegelwandler 3,3 V → 5 V (1 IC, 8 Kanäle) | — |
@@ -46,6 +46,6 @@ noch unter `firmware/`.
 - [`firmware/`](firmware/) – ESP-IDF-Testprojekt (LEDC-Sound aus dem C3-Entwurf, Component `components/sound/`); wird für die S3-Audiokette (MAX98357A/SD) neu aufgesetzt
 - [`datasheets/`](datasheets/) – eigene PCB-Skizze und Foto des Automaten
 
-> Die Hersteller-Datenblätter (Microchip MCP23S17, Maxim MAX7219) und das ESP32-Pinout
+> Die Hersteller-Datenblätter (Microchip MCP23S17, Maxim MAX7219/7221) und das ESP32-Pinout
 > werden in der Doku als Quellen genannt, aus Urheberrechtsgründen aber nicht mitgeliefert –
 > bitte direkt beim Hersteller beziehen.

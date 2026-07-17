@@ -2,19 +2,13 @@
 
 **Projekt:** Nachbau der Steuerung eines Wandkegelautomaten „Bowling de Luxe / Mini Sport Kegler" (Fa. Dibisch, ~1970er)
 **Zentrale Steuerung:** ESP32-S3-WROOM-1-N16R8
-**Stand:** 2026-07-16 (Display als MAX7221 festgelegt – Variante B, Treiber auf der Hauptplatine)
-
-> **Wechsel C3 → S3:** Der ursprüngliche Entwurf nutzte einen ESP32-C3 Super Mini mit
-> LEDC-PWM-Sound. Weil die Audioqualität nicht überzeugte, läuft die Steuerung jetzt auf
-> einem **ESP32-S3-WROOM-1-N16R8**. Der größere Pin-Vorrat erlaubt echten Ton per
-> **MAX98357A (I²S)** von **SD-Karte** sowie eine sauberere Bus-Aufteilung
-> (zwei SPI-Busse statt eines gemeinsamen).
+**Stand:** 2026-07-17
 
 ---
 
 ## 1. Übersicht & Zielsetzung
 
-Der Automat ist ein Wandgerät, bei dem mit einem Hebel Kugeln „eingeschossen" werden, um möglichst viele Kegel umzuwerfen. Die Steuerplatine bildet den originalen Spielablauf nach. Anzusteuern / auszuwerten sind:
+Der Automat ist ein Wandgerät, bei dem mit einem Hebel Kugeln „eingeschossen" werden, um möglichst viele Kegel umzuwerfen. Die **Kegel werden durch Lampen symbolisiert**, die erzielten **Punkte auf den 7-Segment-Displays** angezeigt. Die Steuerplatine bildet den originalen Spielablauf nach. Anzusteuern / auszuwerten sind:
 
 | Menge | Element | Elektrische Eigenschaft |
 |------:|---------|-------------------------|
@@ -165,7 +159,7 @@ Das Modul **ESP32-S3-WROOM-1-N16R8** (16 MB Flash, **8 MB Octal-PSRAM**) führt 
 | **7**  | SPI3 **MISO** | IN | ← MCP23S17 SO (3,3 V) | nur MCP treibt MISO |
 | **18** | **MAX7221 CS** (= LOAD-Pin) | OUT | → 74HCT541 (+Serien-R) → MAX7221 | aktiv-LOW; Latch mit steigender CS-Flanke |
 | **15** | **MCP23S17 /CS** | OUT | → MCP23S17 CS (3,3 V) | Pull-up nach 3,3 V |
-| **6**  | **MCP23S17 INT** | IN | ← MCP INTA/INTB (gespiegelt) | 1 Interrupt-Leitung |
+| **6**  | **MCP23S17 INT** | IN | ← MCP **INTA** (INTB bleibt offen) | 1 INT-Leitung; `IOCON.MIRROR` = 1 (siehe 9.3) |
 | **3**  | **74HC595 SER** | OUT | → 74HCT541 → 595 (Daten) | dedizierte Lampen-IOs; Strapping-Pin, Pulldown empfohlen |
 | **10** | **74HC595 SRCLK** | OUT | → 74HCT541 → 595 (Schiebetakt) | |
 | **9**  | **74HC595 RCLK** | OUT | → 74HCT541 → 595 (Latch) | |
@@ -178,6 +172,7 @@ Das Modul **ESP32-S3-WROOM-1-N16R8** (16 MB Flash, **8 MB Octal-PSRAM**) führt 
 | 39–42 | **Reserve** | — | frei | JTAG-Pins, bei USB-JTAG als GPIO nutzbar |
 
 **Festverdrahtete Steuerpins (kein GPIO nötig):**
+- MCP23S17 `A0`, `A1`, `A2` → fest auf **GND** (Adresse `000`, siehe Abschnitt 9.1).
 - MCP23S17 `/RESET` → fest auf **3,3 V** (Pull-up 10 kΩ).
 - 74HC595 `/SRCLR` (Master Reset) → fest auf **5 V**.
 - 74HCT541 `/OE1`, `/OE2` (Pin 1 + 19) → **GND** (Buffer immer aktiv).
@@ -289,9 +284,10 @@ Der Treiber bleibt auf der **Hauptplatine**, die 16 Matrixleitungen laufen über
 
 ### 8.4 Maßnahmen für das ~1-m-Kabel (Variante B)
 
-1. **Serien-/Source-Termination:** 68–100 Ω direkt am **74HCT541-Ausgang** in `CLK`, `DIN` und `CS` (Widerstand am Treiber-Pin, nicht am MAX). **Auf allen drei Leitungen gleicher Wert**, damit kein Versatz zwischen Takt und Daten entsteht. Timing bleibt entspannt (100 Ω gegen ~30 pF ≈ 3 ns; die MAX-Eingänge haben 1 V Hysterese).
+1. **Serien-R an `CLK`, `DIN`, `CS` – EMV-Vorsorge, nicht kabelbedingt:** 68–100 Ω direkt am **74HCT541-Ausgang** (Widerstand am Treiber-Pin, nicht am MAX), **auf allen drei Leitungen gleicher Wert**, damit kein Versatz zwischen Takt und Daten entsteht.
+   > **Einordnung:** Diese drei Leitungen laufen in Variante B **nicht** über das Band – 541 und MAX7221 sitzen wenige Zentimeter voneinander auf der Hauptplatine. Bei ~5–8 ns Flankenzeit des 74HCT541 und ~6 ns/m auf FR4-Microstrip liegt die Grenze „elektrisch kurz" (l < t_r / 6·t_pd) bei **≈ 17 cm** – die Strecke ist also um eine Größenordnung unkritisch, Reflexionen sind hier kein Thema (Reflexionen hängen an der Flankensteilheit, nicht am Takt). Die Widerstände bleiben trotzdem bestückt: Sie kosten nichts, dämpfen Flanken und Abstrahlung, und das Timing bleibt entspannt (100 Ω gegen ~30 pF ≈ 3 ns; die MAX-Eingänge haben 1 V Hysterese). **Zwingend** werden sie erst bei **Variante A**, wo `DIN/CLK/CS` über die 1 m gehen (siehe Kasten am Ende von Abschnitt 8).
 2. **SPI-Takt für den MAX auf ~1 MHz** (in ESP-IDF pro Device über `clock_speed_hz` im `spi_device_interface_config_t`). Für 8 Digits reicht das dicke; langsamere Flanken über 1 m sind ein Geschenk. Der MCP23S17 darf am selben SPI3-Bus weiter mit 8–10 MHz laufen – der Treiber schaltet die Rate pro Transaktion um.
-3. **RSET eher moderat** wählen: kleinerer Segment-Spitzenstrom = weniger Umladung auf den langen Adern = weniger Ghosting.
+3. **RSET eher moderat** wählen: kleinerer Segment-Spitzenstrom = weniger Umladung auf den langen Adern = weniger Ghosting. (Ghosting-Mechanismus: Das Band hat ~50 pF/m zwischen den Adern, also ~50 pF je Ader auf 1 m. Beim Digit-Wechsel lädt sich diese Kapazität um und lässt die Nachbarziffer schwach nachleuchten – der Klassiker bei abgesetzten Multiplex-Displays.)
 4. **Abblockung direkt am MAX7221:** 10 µF Elko **+** 100 nF Keramik an V+/GND (die Digit-Treiber ziehen im Multiplex kräftige Spitzen – das ist die eigentliche Störquelle). **Beide GND-Pins (4 und 9) anschließen** (wird gern übersehen), durchgehende Massefläche unter den Signalleitungen.
 5. **Masse-Verschachtelung des 34-poligen Bands beibehalten** (Signal–GND–Signal–GND, siehe 8.1).
 6. **Original-„Widerstände"-Platine entfernen/überbrücken:** Der MAX7221 ist eine **Konstantstromquelle** (Strom kommt aus RSET). Serienwiderstände in den SEG-/DIG-Leitungen fressen nur die ohnehin knappe Spannungsreserve bei V+ = 5 V – dort **keine** Widerstände.
@@ -314,15 +310,32 @@ Der Treiber bleibt auf der **Hauptplatine**, die 16 Matrixleitungen laufen über
 - **5-V-Strombudget Display:** eine „8." = 8 Segmente × 40 mA = **~320 mA** je aktivem Digit. Da immer nur ein Digit leuchtet (Multiplex), ist das zugleich rund der Mittelwert im Worst Case (alle Digits „8."). Für das 5-V-Netzteil ~350 mA für die Anzeige einplanen (zusätzlich zu Lampen/Audio).
 - Datenblatt: Kingbright SC08-11EWA, Spec DSAP8389 Rev V.1A (2020).
 
-> **Restrisiko & Rückfallebene:** Multiplex über ~1 m kann trotz aller Maßnahmen ein Rest-Ghosting zeigen. Falls es sich im Betrieb zeigt, ist die saubere Lösung (Variante A) den MAX7221 auf eine kleine Platine **ins Display-Gehäuse** zu setzen – dann laufen nur noch `DIN/CLK/CS/5 V/GND` über die 1 m, die 16 Matrixleitungen bleiben kurz. Die Firmware bliebe unverändert.
+> **Restrisiko & Rückfallebene:** Multiplex über ~1 m kann trotz aller Maßnahmen ein Rest-Ghosting zeigen. Das Datenblatt (S. 10) empfiehlt ausdrücklich das Gegenteil von Variante B: *„The MAX7219/MAX7221 should be placed in close proximity to the LED display, and connections should be kept as short as possible to minimize the effects of wiring inductance and electro-magnetic interference."* Falls sich Ghosting im Betrieb zeigt, ist die saubere Lösung (**Variante A**) den MAX7221 auf eine kleine Platine **ins Display-Gehäuse** zu setzen – dann laufen nur noch `DIN/CLK/CS/5 V/GND` über die 1 m, die 16 Matrixleitungen bleiben kurz und die 320-mA-Digit-Pulse bleiben beim Display. Die Firmware bliebe unverändert.
+>
+> **Was bei Variante A mitwandert:** `RSET` und vor allem die Abblockung (10 µF + 100 nF, laut Datenblatt „as close to the device as possible") gehören dann auf die Display-Platine, ebenso beide GND-Pins. Und **erst dann** sind die Serien-R (68–100 Ω) in `CLK/DIN/CS` elektrisch wirklich nötig: Über 1 m ist die Leitung elektrisch lang, unterminiert gibt es Ringing. Das Flachband mit alternierendem Masse-Draht liegt bei ~100–130 Ω Wellenwiderstand, der 74HCT541 bei ~40 Ω Ausgangsimpedanz → 68–100 Ω passen gut dazu.
 
 ---
 
 ## 9. MCP23S17 – Kontakte (16 Eingänge)
 
-SPI-Port-Expander mit **16 IO** (Port A: GPA0–7, Port B: GPB0–7). Versorgung **3,3 V** (damit 3,3-V-SPI direkt funktioniert, siehe Abschnitt 3). SPI-Signale (SCK, SI=MOSI, SO=MISO, CS) **ungepuffert** direkt zum ESP am **SPI3-Bus**. Alle 16 IO dienen jetzt als **Kontakt-Eingänge** (die Spulen liegen nicht mehr am MCP, sondern direkt am ESP – siehe Abschnitt 9.3).
+SPI-Port-Expander mit **16 IO** (Port A: GPA0–7, Port B: GPB0–7). Versorgung **3,3 V** (damit 3,3-V-SPI direkt funktioniert, siehe Abschnitt 3). SPI-Signale (SCK, SI=MOSI, SO=MISO, CS) **ungepuffert** direkt zum ESP am **SPI3-Bus**. Alle 16 IO dienen als **Kontakt-Eingänge**; die Spulen hängen direkt am ESP (Leistungsteil siehe Abschnitt 9.4).
 
-### 9.1 IO-Belegung
+### 9.1 Adresspins A0/A1/A2 → alle drei fest auf GND
+
+Die drei Adresspins sind Eingänge und **dürfen nie floaten** – das Datenblatt verlangt die externe Beschaltung ausdrücklich unabhängig vom Zustand des HAEN-Bits: *„The address pins (A2, A1 and A0) must be externally biased, regardless of the HAEN bit value."*
+
+**GND** ist hier die richtige Wahl, weil die Geräteadresse damit in **beiden** HAEN-Fällen `000` ist:
+
+| `IOCON.HAEN` | Verhalten laut Datenblatt | Adresse bei A2/A1/A0 = GND |
+|--------------|---------------------------|----------------------------|
+| **0** (POR-Default) | Adresspins deaktiviert, Adresse fest `A2 = A1 = A0 = 0` | `000` |
+| **1** | Adresse folgt dem Pin-Zustand | `000` |
+
+→ Der Opcode `0x40` (write) / `0x41` (read) stimmt dadurch immer, egal ob eine Lib das HAEN-Bit setzt oder nicht. Bei Beschaltung auf 3,3 V hinge der korrekte Opcode dagegen am HAEN-Bit – eine vermeidbare Fehlerquelle. Da nur **ein** MCP am Bus hängt und ein eigenes `/CS` (GPIO15) besitzt, wird die Hardware-Adressierung ohnehin nicht gebraucht.
+
+Direkte Verbindung nach GND genügt (keine Widerstände nötig). Wer sich einen zweiten MCP am selben `/CS` offenhalten will, sieht je Pin einen Lötjumper (Pad → GND / Pad → 3,3 V) vor.
+
+### 9.2 IO-Belegung
 
 | Pin | Funktion | Richtung | Beschaltung |
 |-----|----------|:--------:|-------------|
@@ -330,16 +343,20 @@ SPI-Port-Expander mit **16 IO** (Port A: GPA0–7, Port B: GPB0–7). Versorgung
 | GPB0–GPB5 | Kontakt 9–14 | IN | interner Pull-up, schaltet gegen GND |
 | GPB6, GPB7 | **Reserve** | – | frei |
 
-> **Bilanz:** 14 Kontakte + **2 Reserve** = 16 IO. (Der C3-Entwurf hatte hier 12 Kontakte + 3 Spulen; die Spulen sind ausgezogen, dadurch mehr Kontakt-Kapazität.)
+> **Bilanz:** 14 Kontakte + **2 Reserve** = 16 IO.
 
-### 9.2 Kontakt-Erfassung per Interrupt
+### 9.3 Kontakt-Erfassung per Interrupt
 
 - Alle Eingänge mit **internem Pull-up** (`GPPU` = 1). Ein geschlossener Kontakt zieht den Pin auf GND.
 - **Interrupt-on-Change** (`GPINTEN` = 1, Vergleich gegen Vorwert) meldet jede Kontaktänderung.
-- **INTA/INTB gespiegelt** (`IOCON.MIRROR` = 1) → beide Ports lösen **eine** gemeinsame INT-Leitung aus. Das spart einen ESP-Pin; der ISR liest anschließend per SPI `INTF`/`INTCAP`/`GPIO` beider Ports und ermittelt den geänderten Kontakt.
-- Der ESP reagiert auf die INT-Flanke an **GPIO6**.
+- **INTA/INTB werden per `IOCON.MIRROR` = 1 gespiegelt** – die Verodung passiert **intern**: *„the INTn pins are functionally OR'ed so that an interrupt on either port will cause both pins to activate."* Beide Pins führen also dasselbe Signal.
+- **Verdrahtet wird nur `INTA` → GPIO6; `INTB` bleibt offen.** Ein Draht zwischen beiden Pins bringt funktional nichts und ist elektrisch schlechter: Mit dem Default `IOCON.ODR` = 0 sind die INT-Pins **Push-Pull**-Ausgänge (*„Active driver output"*). Parallelgeschaltet hinge die Kollisionsfreiheit allein am gesetzten MIRROR-Bit – der POR-Default von IOCON ist aber `0x00`, also MIRROR = 0 (Pins getrennt). Ein echtes Wire-OR bräuchte `ODR` = 1 (Open-Drain, überschreibt INTPOL) + Pull-up 10 kΩ nach 3,3 V; hier nicht nötig.
+- INTA treibt push-pull und ist mit `INTPOL` = 0 **aktiv-LOW** → am ESP ist **kein externer Pull-up** erforderlich.
+- Der ISR liest nach der INT-Flanke an **GPIO6** per SPI `INTF`/`INTCAP`/`GPIO` beider Ports und ermittelt den geänderten Kontakt.
 
-### 9.3 Spulen-Leistungsteil (IRL540, direkt vom ESP)
+### 9.4 Spulen-Leistungsteil (IRL540, direkt vom ESP)
+
+**Funktion der Münz-Weiche:** Die Spulen stellen beim Münzeinwurf die Weiche. Im **stromlosen („Aus"-)Zustand fallen die Münzen durch** – der Automat nimmt kein Geld an. Erst die bestromte Spule leitet die Münze in den Annahmeweg. Das macht „Spule aus" zum sicheren Grundzustand (siehe Abschnitt 11).
 
 - **ESP-Ausgang** (GPIO12/11) HIGH → 74HCT541 (5 V) → **IRL540-Gate** → Spule (24 V) low-side eingeschaltet.
 - **Gate-Pulldown (z. B. 10 kΩ)** je IRL540 → definierter Aus-Zustand bei Boot / vor Firmware-Init (die ESP-Ausgänge sind vor der Init hochohmige Eingänge).
@@ -371,7 +388,7 @@ Definierte, ungefährliche Zustände von Power-on bis Firmware-Init:
 | Element | Maßnahme | Zustand beim Boot |
 |---------|----------|-------------------|
 | Lampen | 2N7002 sperrt (Gate-Pulldown) → 595-`/OE` per Pull-up auf 5 V → Ausgänge hochohmig + Gate-Pulldowns | **alle aus** |
-| Spulen | IRL540-Gate-Pulldowns; ESP-Ausgänge (12/11) nach Reset hochohmig | **alle aus** |
+| Spulen | IRL540-Gate-Pulldowns; ESP-Ausgänge (12/11) nach Reset hochohmig | **alle aus** → Münzen fallen durch (sicherer Zustand, siehe 9.4) |
 | Display | MAX7221 startet im Shutdown (Datasheet) | **dunkel** |
 | MCP | `/RESET` fest auf 3,3 V; Register-Defaults = alle Pins Eingang | keine ungewollten Ausgänge |
 | Sound | I²S-Pins vor Init hochohmig; MAX98357A liefert ohne Takt kein Signal | **still** |
@@ -399,7 +416,7 @@ Definierte, ungefährliche Zustände von Power-on bis Firmware-Init:
 
 ## 13. Soundausgabe (MAX98357A über I²S, Files von SD-Karte)
 
-Der frühere LEDC-PWM-Ansatz (Rechteck-Ton auf einem GPIO + analoger Verstärker, z. B. TDA7267) wird ersetzt: Der Ton kommt jetzt als **echte Audio-Datei von SD-Karte**, wird vom ESP32-S3 dekodiert/gestreamt und über **I²S** an einen **MAX98357A** (Class-D-Mono-Verstärker) ausgegeben. Das liefert deutlich bessere Klangqualität als der PWM-Piep und braucht **keinen** zusätzlichen Analog-Verstärker.
+Der Ton liegt als **echte Audio-Datei auf SD-Karte**, wird vom ESP32-S3 gestreamt und über **I²S** an einen **MAX98357A** (Class-D-Mono-Verstärker) ausgegeben. Der MAX98357A treibt den Lautsprecher direkt – ein zusätzlicher Analog-Verstärker ist **nicht** nötig.
 
 **Signalkette:**
 
@@ -427,7 +444,7 @@ Drei DIP-Schalter (DIP1-3) teilen sich die I²S-Leitungen (GPIO47/21/14). Ein Pu
 
 > **Wichtig:** Der DIP-Puffer muss aus **3,3 V** versorgt werden – er treibt direkt auf ESP-Pins, und der S3 ist nicht 5-V-tolerant (siehe Abschnitt 12, Punkt 7).
 
-**Firmware:** Die zentralen Pin-Zuweisungen stehen in `gpiodefs.h` (I²S, SD, Taster/DIP). Die S3-Audiokette (ESP-IDF: I²S-Treiber + FATFS/SD) wird als zweiter Schritt aufgesetzt; das alte LEDC-Testprojekt unter `firmware/` bleibt vorerst als Referenz bestehen.
+**Firmware:** Die zentralen Pin-Zuweisungen stehen in `gpiodefs.h` (I²S, SD, Taster/DIP). Die Audiokette (ESP-IDF: I²S-Treiber + FATFS/SD) wird als zweiter Schritt aufgesetzt.
 
 **Für die Platine:** SD-Slot, MAX98357A-Modul und Lautsprecher vorsehen; Analog-/Audio-GND sternförmig und getrennt vom Leistungs-GND der Lampen/Spulen führen.
 
@@ -435,8 +452,7 @@ Drei DIP-Schalter (DIP1-3) teilen sich die I²S-Leitungen (GPIO47/21/14). Ein Pu
 
 ## Anhang: Verwendete Quellen
 
-- `Projekt_Kegelautomat.txt` – Projektbeschreibung
-- `datasheets/MCP23S17_MIC.pdf` – DC-Kennwerte (V_IH = 0,8·VDD; Betrieb 1,8–5,5 V; max. 25 mA/Pin)
+- `datasheets/MCP23S17_MIC.pdf` – DC-Kennwerte (V_IH = 0,8·VDD; Betrieb 1,8–5,5 V; max. 25 mA/Pin); Pin-Beschreibung + Abschnitt 1.6.6: Adresspins extern beschalten unabhängig von HAEN, HAEN = 0 → Adresse `000`; MIRROR-Bit verodert INTA/INTB intern; ODR-Default = Push-Pull
 - `datasheets/max7219-max7221.pdf` – Electrical Characteristics (V_IH = 3,5 V @ V+ = 5 V; common cathode; 8 Digits). **MAX7221** hier gewählt: echtes SPI-CS + slew-rate-limitierte Segmenttreiber (EMV), sonst registerkompatibel zum MAX7219.
 - `datasheets/Display.jpg` – Original-Display-Verdrahtung: gemultiplexte 8×8-Matrix (8 SEG + 8 DIG), 34-poliger Stecker, 3 Platinen (2×2 + 1×4)
 - `datasheets/esp32-S3-pinout.pdf` – Pinout ESP32-S3-WROOM-1

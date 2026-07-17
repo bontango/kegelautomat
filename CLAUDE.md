@@ -7,14 +7,10 @@ Nachbau der Steuerung eines Wandkegelautomaten aus den 1970ern („Bowling de Lu
 Mini Sport Kegler", Fa. Dibisch). Eine neue **ESP32-S3-WROOM-1-N16R8**-Steuerplatine bildet
 den originalen Spielablauf nach. Aktuell: **Hardware-/Platinen-Entwurf**.
 
-> **Wechsel C3 → S3 (2026-07-14):** ursprünglich ESP32-C3 mit LEDC-PWM-Sound; wegen der
-> Audioqualität auf den S3 umgestellt, um **MAX98357A (I²S)** + **SD-Karte** für echte
-> Audio-Files zu nutzen. Größerer Pin-Vorrat → sauberere Bus-Aufteilung.
-
 ## Anzusteuernde Peripherie des Automaten
 - 30× Lampen (5 V, low-side gegen GND)
 - 16× Kontakt-Eingänge (schalten gegen GND, keine Matrix; 2 Reserve)
-- 2× Spulen / Münz-Weiche (24 V, low-side)
+- 2× Spulen / Münz-Weiche (24 V, low-side) – **stromlos fallen die Münzen durch** (sicherer Grundzustand)
 - 8× 7-Segment-Displays (common cathode) — **fest gemultiplexte 8×8-Matrix** (8 SEG + 8 DIG),
   3 Platinen (2×2 + 1×4) an **einem ~1 m langen 34-pol. Flachband** (Signal–GND verschachtelt)
 - **Sound (Zusatz, kein Originalteil):** Audio-Files von SD → MAX98357A (I²S) → Lautsprecher
@@ -36,7 +32,9 @@ den originalen Spielablauf nach. Aktuell: **Hardware-/Platinen-Entwurf**.
   beide GND-Pins, Original-„Widerstände"-Platine entfernen (MAX = Konstantstrom). Details Doku Abschn. 8.
   Digit = **Kingbright SC08-11EWA** (0,8″ cc, V_F≈1,9 V typ → viel Headroom @ 5 V; 30 mA DC / 160 mA Peak).
 - **Kontakte:** MCP23S17 @ **3,3 V**, alle 16 IO als Eingänge (14 belegt + 2 Reserve),
-  Pull-up + Interrupt-on-Change, INTA/INTB **gespiegelt** → 1 INT-Leitung.
+  Pull-up + Interrupt-on-Change. `IOCON.MIRROR` = 1 verodert INTA/INTB **intern** → nur
+  **INTA** geht an GPIO6, **INTB bleibt offen** (Pins nicht zusammenlöten: ODR-Default =
+  Push-Pull). Adresspins **A0/A1/A2 fest auf GND** → Adresse `000` bei HAEN = 0 *und* 1.
 - **Spulen:** 2× direkt vom ESP (GPIO 12/11) → 74HCT541 → IRL540 low-side.
 - **74HCT541** = Pegelwandler 3,3 V→5 V, **1 IC, 8/8 Kanäle:** SPI3-SCLK, SPI3-MOSI, MAX-CS,
   595-SER/-SRCLK/-RCLK + 2× Spulen-Gate.
@@ -64,15 +62,13 @@ den originalen Spielablauf nach. Aktuell: **Hardware-/Platinen-Entwurf**.
 - `Steuerplatine_Doku.md` – **Haupt-Doku**: Funktionsweise, S3-Portbelegung + Treiber-ICs,
   Blockdiagramm, Boot-/Sicherheitsverhalten, offene Punkte.
 - `gpiodefs.h` – zentrale GPIO-Zuweisungen (I²S, SD, Bedienung/DIP).
-- `Projekt_Kegelautomat.txt` – ursprüngliche Projektbeschreibung.
 - `datasheets/` – MCP23S17, MAX7219/7221, ESP32-S3-Pinout, PCB-Skizze, Foto Automat,
   `Display.jpg` (Original-Display-Verdrahtung: 8×8-Matrix, 34-pol. Stecker).
-- `firmware/` – **noch** das alte flashbare LEDC-Sound-Testprojekt (Target esp32c3) aus dem
-  C3-Entwurf; wird für die S3-Audiokette (MAX98357A/SD) neu aufgesetzt.
 
 ## Status & nächste Schritte
 - **Jetzt:** Prototyp-Platine auf S3 entwerfen anhand der Doku.
-- **Step 2:** S3-Firmware mit ESP-IDF/VSCode (I²S + FATFS/SD, 595-/MCP-/MAX7221-Ansteuerung).
+- **Step 2:** Firmware mit ESP-IDF/VSCode (I²S + FATFS/SD, 595-/MCP-/MAX7221-Ansteuerung).
+  Im Repo liegt dafür noch kein Code.
 - Offene HW-Punkte: 5-V-Strombudget (30 Lampen), Freilaufdioden an den 2 Spulen, IRL540-Strom
   real prüfen, DIP-Puffer im I²S-Betrieb hochohmig halten.
 

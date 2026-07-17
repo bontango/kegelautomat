@@ -1,17 +1,13 @@
 # Kegelautomat – ESP32-S3 Steuerplatine
 
 Neuentwurf der Steuerung für einen Wandkegelautomaten aus den 1970er-Jahren
-(„Bowling de Luxe / Mini Sport Kegler", Fa. Dibisch). Eine ESP32-S3-basierte
-Platine bildet den originalen Spielablauf nach.
-
-> Ursprünglich als ESP32-C3-Entwurf begonnen; wegen der Audioqualität auf einen
-> **ESP32-S3-WROOM-1-N16R8** umgestellt, der einen I²S-Verstärker (MAX98357A) und
-> einen SD-Kartenleser für echte Audio-Files trägt.
+(„Bowling de Luxe / Mini Sport Kegler", Fa. Dibisch). Eine Platine mit
+**ESP32-S3-WROOM-1-N16R8** bildet den originalen Spielablauf nach.
 
 ## Der Automat steuert / erfasst
 - **30 Lampen** (5 V, low-side) – symbolisieren die Kegel u. a.
 - **Kontakte** (Einzelkontakte gegen GND) – erfasst über MCP23S17, **16 Eingänge (2 Reserve)**
-- **2 Spulen** (24 V) – Münz-Weiche
+- **2 Spulen** (24 V) – Münz-Weiche; **stromlos fallen die Münzen durch** (sicherer Grundzustand)
 - **8× 7-Segment-Displays** (common cathode, gemultiplexte 8×8-Matrix, 34-pol. Ribbon ~1 m) – Punkteanzeige
 - **Sound** (Zusatz, kein Originalteil): Audio-Files von SD-Karte über **MAX98357A (I²S)**
 
@@ -29,21 +25,17 @@ Platine bildet den originalen Spielablauf nach.
 | **SD-Kartenleser** | Audio-Files (WAV) | SPI2 |
 
 Zwei getrennte SPI-Busse (**SPI2 = SD-Karte**, **SPI3 = Display + Kontakte**) plus ein
-**I²S**-Zweig für den Ton – statt des einen gemeinsamen SPI-Busses des C3-Entwurfs.
-Ausführliche Beschreibung, Portbelegung und Blockdiagramm:
+**I²S**-Zweig für den Ton. Ausführliche Beschreibung, Portbelegung und Blockdiagramm:
 **[`Steuerplatine_Doku.md`](Steuerplatine_Doku.md)**.
 
 ## Status
-**Layout der Prototyp-Platine fertig** (Stand 2026-07-15); die Portbelegung ist damit
-festgezurrt – siehe [`gpiodefs.h`](gpiodefs.h) und Abschnitt 5 der Doku. Firmware (C, ESP-IDF)
-folgt als zweiter Schritt; ein flashbares LEDC-Sound-Testprojekt aus dem C3-Entwurf liegt
-noch unter `firmware/`.
+**Layout der Prototyp-Platine fertig**; die Portbelegung ist damit festgezurrt – siehe
+[`gpiodefs.h`](gpiodefs.h) und Abschnitt 5 der Doku. Die Firmware (C, ESP-IDF: I²S + FATFS/SD,
+595-/MCP-/MAX7221-Ansteuerung) folgt als zweiter Schritt.
 
 ## Repository-Inhalt
 - [`Steuerplatine_Doku.md`](Steuerplatine_Doku.md) – vollständige technische Doku
-- [`Projekt_Kegelautomat.txt`](Projekt_Kegelautomat.txt) – ursprüngliche Projektbeschreibung
-- [`gpiodefs.h`](gpiodefs.h) – zentrale GPIO-Zuweisungen der neuen S3-Platine (I²S, SD, Bedienung)
-- [`firmware/`](firmware/) – ESP-IDF-Testprojekt (LEDC-Sound aus dem C3-Entwurf, Component `components/sound/`); wird für die S3-Audiokette (MAX98357A/SD) neu aufgesetzt
+- [`gpiodefs.h`](gpiodefs.h) – zentrale GPIO-Zuweisungen der Platine (I²S, SD, Bedienung)
 - [`datasheets/`](datasheets/) – eigene PCB-Skizze und Foto des Automaten
 
 > Die Hersteller-Datenblätter (Microchip MCP23S17, Maxim MAX7219/7221) und das ESP32-Pinout

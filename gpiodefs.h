@@ -12,17 +12,17 @@
  *  ---- DO-NOT-USE LIST ---------------------------------------------
  *   GPIO 26-32 : SPI flash                       -> n/a
  *   GPIO 33-37 : Octal PSRAM (module "R8")       -> NEVER use
- *   GPIO 19,20 : USB D-/D+ (USB-Serial/JTAG)     -> flash/console
- *   GPIO 43,44 : UART0 TX/RX (boot log)          -> spare possible *
- *   GPIO 0     : boot strap + BOOT button        -> keep as input/boot
- *   GPIO 45,46 : strapping (VDD_SPI / boot-ROM)  -> avoid
- *   GPIO 3     : strapping (JTAG select)         -> usable (= HC595 SER)
+ *   GPIO 19,20 : USB D-/D+ (native USB-Serial/JTAG) -> v07: NOT used (nc), free
+ *   GPIO 43,44 : UART0 TX/RX                      -> v07: CH340C bridge
+ *                                                    (programming/console via USB-C)
+ *   GPIO 0     : boot strap + BOOT button         -> keep as input/boot
+ *   GPIO 45,46 : strapping (VDD_SPI / boot-ROM)   -> avoid
+ *   GPIO 3     : strapping (JTAG select)          -> usable (= HC595 SER)
  *   GPIO 22-25 : do not exist on the S3
- *   * 43/44 free only if the console runs over USB (brief boot log)
  *
  *  NOT 5 V tolerant: never pull any GPIO above ~3.6 V.
  *  Free GPIO pool (usable): 0-18, 21, 38-42, 47, 48 (mind strapping).
- *  Unused by this mapping: GPIO 39-42 (JTAG) -> 4 spare IOs.
+ *  Unused by this mapping: GPIO 39-42 (JTAG) + 19/20 (native USB) -> spare IOs.
  * ===================================================================== */
 
 // 3 Digital Pins for I2S / MAX98357A (audio.c)

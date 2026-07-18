@@ -116,6 +116,21 @@ Der ESP32-S3 gibt an seinen GPIOs nur **3,3 V** aus. Mehrere 5-V-Bausteine verla
 
 > **Ergebnis:** Der eine 74HCT541 ist mit **8 von 8 Kanälen** belegt: SPI3-SCLK, SPI3-MOSI, MAX-CS, 595-SER/-SRCLK/-RCLK + 2 Spulen-Gate-Signale. `/OE` läuft separat über den 2N7002. Siehe Abschnitt 6.
 
+### 3.2 5-V-Einspeisung: USB-VBUS ↔ externes Netzteil (Entkopplung)
+
+Das 5-V-Rail wird aus **zwei** Quellen gespeist: dem **externen 5-V-Netzteil an J1** (Volllast inkl. Lampen) und **USB-VBUS** (nur beim Programmieren/Debuggen über USB-C). Damit bei gleichzeitig gestecktem USB **und** externem Netzteil nicht das eine ins andere zurückspeist (Rückstrom in den PC-Port über die PTC-Sicherung F1), ist der VBUS-Zweig **entkoppelt**:
+
+```
+USB-VBUS ──► F1 (PTC, MF-MSMF150: I_hold 1,5 A) ──► SS24 ──►┐
+                                                            ├── +5-V-Rail
+externes 5-V-Netzteil ─────────── J1 ──────────────────────►┘
+```
+
+- **Schottky = SS24** (2 A / 40 V, SMA). Sperrt Rückspeisung ins USB-Port; niedriger Vf (~0,3–0,4 V bei < 1 A), da der USB-Zweig nur Logik + Display + CH340 trägt (die 30 Lampen bis 3 A laufen ausschließlich über J1, hinter der Diode).
+- **Orientierung:** Anode an F1-Seite (VBUS), **Kathode (Ring) am +5-V-Rail**.
+- **CH340C-VCC** hängt auf der **+5-V-Rail-Seite** (nach der Diode) → sowohl bei USB- als auch bei externer Versorgung sauber versorgt.
+- **Hinweis:** Im reinen USB-Betrieb (ohne J1-Netzteil) frisst der Vf ~0,3 V vom Rail. Für ESP-S3-LDO und MAX98357A unkritisch; falls die Platine mal *ausschließlich* über USB laufen soll (nicht nur flashen), Rail unter Last gegenmessen.
+
 ---
 
 ## 4. ESP32-S3: GPIO-Eigenschaften & Boot-Beschränkungen
@@ -126,8 +141,8 @@ Das Modul **ESP32-S3-WROOM-1-N16R8** (16 MB Flash, **8 MB Octal-PSRAM**) führt 
 |------|--------------|------------|
 | **33–37** | **Octal-PSRAM** (wegen „R8") intern belegt | **nie verwenden** |
 | **26–32** | SPI-Flash | nicht verwendbar |
-| **19, 20** | **USB D-/D+** (nativ, USB-Serial/JTAG) | Konsole/Programmierung → frei halten |
-| **43, 44** | **UART0** TX/RX | Debug-Konsole → frei halten |
+| **19, 20** | **USB D-/D+** (nativ, USB-Serial/JTAG) | auf v07 **nicht belegt** (`nc`) → frei; native USB optional nachrüstbar |
+| **43, 44** | **UART0** TX/RX | auf v07 an **CH340C** (USB-UART-Brücke, Programmierung/Konsole via USB-C) |
 | **0** | Strapping (Boot) + BOOT-Taster | reserviert |
 | **3** | Strapping (JTAG-Quellwahl) | unkritisch bei USB-JTAG; hier 74HC595-`SER` (reiner Ausgang, kein externer Treiber) – Pulldown empfohlen |
 | **45** | Strapping (VDD_SPI) | nicht für Peripherie |
@@ -167,9 +182,9 @@ Das Modul **ESP32-S3-WROOM-1-N16R8** (16 MB Flash, **8 MB Octal-PSRAM**) führt 
 | **12** | **Spule 1** | OUT | → 74HCT541 → IRL540 #1 | |
 | **11** | **Spule 2** | OUT | → 74HCT541 → IRL540 #2 | |
 | 0 | BOOT | — | BOOT-Taster | reserviert |
-| 19/20 | USB | — | USB-Serial/JTAG | Konsole/Flash |
-| 43/44 | UART0 | — | Debug | frei/Debug |
-| 39–42 | **Reserve** | — | frei | JTAG-Pins, bei USB-JTAG als GPIO nutzbar |
+| 19/20 | USB (nativ) | — | **nicht belegt (`nc`)** | native USB-Serial/JTAG optional; auf v07 frei |
+| 43/44 | UART0 | OUT/IN | → **CH340C** (USB-UART) | Programmierung/Konsole via USB-C |
+| 39–42 | **Reserve** | — | frei | JTAG-Pins, als GPIO nutzbar (dann kein JTAG-Debug) |
 
 **Festverdrahtete Steuerpins (kein GPIO nötig):**
 - MCP23S17 `A0`, `A1`, `A2` → fest auf **GND** (Adresse `000`, siehe Abschnitt 9.1).
@@ -178,7 +193,7 @@ Das Modul **ESP32-S3-WROOM-1-N16R8** (16 MB Flash, **8 MB Octal-PSRAM**) führt 
 - 74HCT541 `/OE1`, `/OE2` (Pin 1 + 19) → **GND** (Buffer immer aktiv).
 - MAX98357A `SD_MODE`/`GAIN` → per Widerstand (Kanalwahl (L+R)/2, Gain nach Wunsch).
 
-> **Bilanz:** 22 GPIOs belegt (1–18, 21, 38, 47, 48). Frei bleiben **GPIO 39–42** → **4 Reserve** am ESP (die JTAG-Pins MTCK/MTDO/MTDI/MTMS; nutzbar, solange Konsole und Debugger über USB laufen). Zusätzlich reserviert sind die System-Pins (USB 19/20, UART0 43/44, BOOT 0). Am MCP23S17 stehen **2 Reserve**-Eingänge zur Verfügung.
+> **Bilanz:** 22 GPIOs belegt (1–18, 21, 38, 47, 48). Frei bleiben **GPIO 39–42** → **4 Reserve** am ESP (die JTAG-Pins MTCK/MTDO/MTDI/MTMS; als GPIO nutzbar, dann entfällt JTAG-Debug – die Konsole läuft ohnehin über den CH340). Auf v07 sind **IO19/20 (native USB) nicht belegt** → zusätzlich frei; **Programmierung/Konsole laufen über die CH340C-Brücke an UART0 (43/44)** am USB-C. BOOT (0) reserviert. Am MCP23S17 stehen **2 Reserve**-Eingänge zur Verfügung.
 
 ---
 
@@ -259,7 +274,7 @@ Die 8 Ziffern sind **fest als gemultiplexte 8×8-Matrix** verdrahtet – nicht s
 
 | Ribbon-Pins | Signal | Bedeutung |
 |-------------|--------|-----------|
-| 19, 21, 23, 25, 27, 29, 31, 33 (ungerade) | `a b c d e f g dP2` | **8 Segmentleitungen**, über alle Ziffern gemeinsam (Segment-Bus) |
+| 19, 21, 23, 25, 27, 29, 31, 33 (ungerade) | 19=dP2, 21=g, 23=f, 25=e, 27=d, 29=c, 31=b, **33=a** | **8 Segmentleitungen**, über alle Ziffern gemeinsam (Segment-Bus) – Reihenfolge **absteigend** (dP2→a) laut `Display.jpg`, so auch im Schaltplan verdrahtet |
 | 2, 4, 6, 8, 10, 12, 14, 16 (gerade) | Bip 1er/10er · Credit 1er/10er · Score 1er/10er/100er/1000er | **8 Digit-Auswahlleitungen** (je ein Common pro Ziffer) |
 | dazwischenliegende Pins | GND / Rückleiter | Signal–GND–Signal–GND verschachtelt |
 
@@ -339,9 +354,9 @@ Direkte Verbindung nach GND genügt (keine Widerstände nötig). Wer sich einen 
 
 | Pin | Funktion | Richtung | Beschaltung |
 |-----|----------|:--------:|-------------|
-| GPA0–GPA7 | Kontakt 1–8 | IN | interner Pull-up, schaltet gegen GND |
-| GPB0–GPB5 | Kontakt 9–14 | IN | interner Pull-up, schaltet gegen GND |
-| GPB6, GPB7 | **Reserve** | – | frei |
+| GPB0–GPB7 | Kontakt 1–8 | IN | interner Pull-up, schaltet gegen GND |
+| GPA0–GPA5 | Kontakt 9–14 | IN | interner Pull-up, schaltet gegen GND |
+| GPA6, GPA7 | **Reserve** | – | frei; auf v07 `nc` (nicht auf Header geführt) |
 
 > **Bilanz:** 14 Kontakte + **2 Reserve** = 16 IO.
 
@@ -401,8 +416,8 @@ Definierte, ungefährliche Zustände von Power-on bis Firmware-Init:
 1. **5-V-Netzteil dimensionieren** – bestimmt durch den Summenstrom der 30 Lampen (Lampenstrom messen) plus MAX98357A-Spitzen. Reserve einplanen.
 2. **Freilaufdioden** an beiden Spulen nicht vergessen (24 V, induktiv).
 3. **IRL540 real prüfen:** Spulenstrom messen und gegen die Transfer-Kennlinie bei V_GS = 5 V gegenchecken. Bei hohen Strömen ggf. auf einen MOSFET mit niedrigerem R_DS(on) bei 5 V wechseln.
-4. **Entkopplung:** je IC 100 nF nahe an VCC/VDD; zusätzlich Elkos an den 5-V- und 24-V-Rails. Getrennte GND-Führung (Leistungs-GND der Lampen/Spulen **und** Audio-GND sternförmig zum Logik-GND).
-5. **Reserve:** am ESP **4** (GPIO 39–42, JTAG-Pins – frei nutzbar, solange Konsole/Debugger über USB laufen), am MCP23S17 **2** Eingänge frei (GPB6/7).
+4. **Entkopplung:** je IC 100 nF nahe an VCC/VDD; zusätzlich Elkos an den 5-V- und 24-V-Rails. Getrennte GND-Führung (Leistungs-GND der Lampen/Spulen **und** Audio-GND sternförmig zum Logik-GND). Zur Entkopplung von USB-VBUS gegen das externe 5-V-Netzteil (SS24) siehe **Abschnitt 3.2**.
+5. **Reserve:** am ESP **4** (GPIO 39–42, JTAG-Pins – als GPIO nutzbar; zusätzlich IO19/20, siehe Abschnitt 5), am MCP23S17 **2** Eingänge frei (GPA6/7, auf v07 `nc`).
 6. **DIP-Multiplexing prüfen:** DIP1-3 liegen auf den I²S-Leitungen (47/21/14), freigegeben über GPIO13. Die DIPs nur einlesen, wenn I²S ruht (z. B. beim Start); der DIP-Puffer muss im I²S-Betrieb sicher **hochohmig** sein, damit er die Audio-Leitungen nicht belastet.
 7. **DIP-Puffer an 3,3 V betreiben** – die DIP-Leitungen treiben direkt in den ESP (47/21/14), und der S3 ist **nicht 5-V-tolerant**. Ein Puffer am 5-V-Rail würde die Pins zerstören. Beim Layout festlegen und prüfen.
 8. **Pulldown an GPIO3 (595-`SER`)** – GPIO3 ist Strapping-Pin (JTAG-Quellwahl) und floatet beim Boot. Ein 10-kΩ-Pulldown definiert gleichzeitig den Strapping-Zustand und den `SER`-Eingang des 74HCT541. Unkritisch (das Boot-Blanking über `/OE` hält die Lampen ohnehin aus), aber billige Absicherung.
@@ -429,8 +444,37 @@ SD-Karte (WAV) ──SPI2──► ESP32-S3 ──I²S (LRC/BCLK/DIN)──► M
 - **Eingänge:** `LRC` (Word-Select, GPIO47), `BCLK` (Bit-Clock, GPIO21), `DIN` (Daten, GPIO14).
 - **Versorgung:** 2,5–5,5 V; für mehr Ausgangsleistung am **5-V-Rail** betreiben (bis ~3 W an 4 Ω).
 - **Ausgang:** Brücken-Endstufe direkt an den Lautsprecher – **kein** Koppelkondensator nötig.
-- **`SD_MODE`-Pin:** per Widerstand konfiguriert → Kanalwahl / Shutdown; für Mono (L+R)/2 den vom Modul vorgegebenen Wert nutzen.
-- **`GAIN`-Pin:** per Widerstand die Verstärkung wählen (Lautstärke-Grundpegel).
+- **`SD_MODE`-Pin (Doppelfunktion Shutdown *und* Kanalwahl):** wird über die
+  **Analogspannung** am Pin ausgewertet (interner 100-kΩ-Pulldown nach GND, externer
+  Widerstand nach VDD stellt die Spannung ein). **Kein Digitalsignal.**
+
+  | Spannung an `SD_MODE` | Ergebnis |
+  |---|---|
+  | < 0,16 V (Pin offen → interner Pulldown zieht auf 0 V) | **Shutdown → kein Ton** |
+  | 0,16 – 0,77 V | **(L + R) / 2** — Stereo-Mix auf Mono ← **für uns richtig** |
+  | 0,77 – 1,4 V | nur **rechter** Kanal |
+  | > 1,4 V | nur **linker** Kanal |
+
+  → Ziel: Spannung im **(L+R)/2-Fenster** halten, damit der Amp *an* ist und der
+  gesamte Datei-Inhalt (nicht nur ein Kanal) auf den Mono-Lautsprecher geht.
+  Fertige Breakouts (Adafruit & Clones) haben den passenden Widerstand meist schon
+  bestückt → **am M2-Modul nur verifizieren**, dass `SD_MODE` nicht auf 0 V (Shutdown)
+  gezogen ist. **Nicht** an einen ESP-GPIO legen, um Mute zu schalten: 3,3 V > 1,4 V
+  ⇒ linker Kanal statt (L+R)/2. Stille stattdessen über den I²S-Strom (kein Takt /
+  Nullen) erzeugen, siehe Boot-/Sicherheitstabelle Abschnitt 12.
+- **`GAIN`-Pin (Grundverstärkung, unkritisch — nur Lautstärke):** ebenfalls per
+  Beschaltung gewählt.
+
+  | `GAIN`-Beschaltung | Verstärkung |
+  |---|---|
+  | 100 kΩ nach VDD | 3 dB |
+  | direkt an VDD | 6 dB |
+  | **offen (floating)** | **9 dB (Default)** |
+  | direkt an GND | 12 dB |
+  | 100 kΩ nach GND | 15 dB |
+
+  → im Zweifel offen lassen (9 dB); nur ändern, falls die Grundlautstärke am
+  Lautsprecher nicht passt.
 
 ### 13.2 SD-Kartenleser (SPI2)
 

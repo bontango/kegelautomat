@@ -53,9 +53,9 @@ den originalen Spielablauf nach. Aktuell: **Hardware-/Platinen-Entwurf**.
 - **GPIO33–37 = Octal-PSRAM (N16R8) → nie verwenden.** GPIO26–32 = SPI-Flash (n/a).
 - Strapping: **GPIO0, 3, 45, 46** – beim Boot in definiertem Zustand lassen. GPIO0 = BOOT-Taster.
 - GPIO3 (Strapping JTAG-Quellwahl) hier als 74HC595-SER, reiner Ausgang – unkritisch bei USB-JTAG.
-- **GPIO19/20 = USB** (Konsole/Flash via USB-Serial/JTAG), **GPIO43/44 = UART0** (Debug) → frei halten.
+- **Programmierung/Konsole auf v07 via CH340C an UART0 (GPIO43/44) + USB-C** (Auto-Reset). **GPIO19/20 (native USB) = nicht belegt/`nc`** → frei; native USB optional nachrüstbar.
 - GPIO 22–25 existieren nicht; keine Input-only-Pins.
-- **4 ESP-Reserve: GPIO 39–42** (JTAG-Pins, frei solange Konsole/Debug über USB); 2 Reserve am MCP.
+- **4 ESP-Reserve: GPIO 39–42** (JTAG-Pins, als GPIO nutzbar → dann kein JTAG-Debug); zusätzlich IO19/20 frei; 2 Reserve am MCP (GPA6/7).
 - Portbelegung im Detail: siehe `Steuerplatine_Doku.md`, Abschnitt 5.
 
 ## Dateien

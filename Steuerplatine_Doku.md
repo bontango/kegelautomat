@@ -2,7 +2,8 @@
 
 **Projekt:** Nachbau der Steuerung eines Wandkegelautomaten „Bowling de Luxe / Mini Sport Kegler" (Fa. Dibisch, ~1970er)
 **Zentrale Steuerung:** ESP32-S3-WROOM-1-N16R8
-**Stand:** 2026-07-17
+**Platinenrevision:** **v1.0** (`datasheets/Kegelautomat_v10_SCH.PDF` / `_PCB.PDF`)
+**Stand:** 2026-07-29
 
 ---
 
@@ -116,18 +117,20 @@ Der ESP32-S3 gibt an seinen GPIOs nur **3,3 V** aus. Mehrere 5-V-Bausteine verla
 
 > **Ergebnis:** Der eine 74HCT541 ist mit **8 von 8 Kanälen** belegt: SPI3-SCLK, SPI3-MOSI, MAX-CS, 595-SER/-SRCLK/-RCLK + 2 Spulen-Gate-Signale. `/OE` läuft separat über den 2N7002. Siehe Abschnitt 6.
 
-### 3.2 5-V-Einspeisung: USB-VBUS ↔ externes Netzteil (Entkopplung)
+### 3.3 5-V-Einspeisung: USB-VBUS ↔ externes Netzteil (Entkopplung)
+
+> **Umgesetzt und am Schaltplan v1.0 verifiziert** (Review-Punkt 4, vorher fehlend).
 
 Das 5-V-Rail wird aus **zwei** Quellen gespeist: dem **externen 5-V-Netzteil an J1** (Volllast inkl. Lampen) und **USB-VBUS** (nur beim Programmieren/Debuggen über USB-C). Damit bei gleichzeitig gestecktem USB **und** externem Netzteil nicht das eine ins andere zurückspeist (Rückstrom in den PC-Port über die PTC-Sicherung F1), ist der VBUS-Zweig **entkoppelt**:
 
 ```
-USB-VBUS ──► F1 (PTC, MF-MSMF150: I_hold 1,5 A) ──► SS24 ──►┐
-                                                            ├── +5-V-Rail
-externes 5-V-Netzteil ─────────── J1 ──────────────────────►┘
+USB-VBUS ──► F1 (PTC, MF-MSMF150-2: I_hold 1,5 A) ──► D4 (SS24) ──►┐
+                                                                   ├── +5-V-Rail
+externes 5-V-Netzteil ─────────── J1 ─────────────────────────────►┘
 ```
 
-- **Schottky = SS24** (2 A / 40 V, SMA). Sperrt Rückspeisung ins USB-Port; niedriger Vf (~0,3–0,4 V bei < 1 A), da der USB-Zweig nur Logik + Display + CH340 trägt (die 30 Lampen bis 3 A laufen ausschließlich über J1, hinter der Diode).
-- **Orientierung:** Anode an F1-Seite (VBUS), **Kathode (Ring) am +5-V-Rail**.
+- **Schottky = D4 (SS24)** (2 A / 40 V, SMA). Sperrt Rückspeisung ins USB-Port; niedriger Vf (~0,3–0,4 V bei < 1 A), da der USB-Zweig nur Logik + Display + CH340 trägt (die 30 Lampen bis 3 A laufen ausschließlich über J1, hinter der Diode).
+- **Orientierung:** Anode an F1-Seite (VBUS), **Kathode (Ring) am +5-V-Rail** – im Schaltplan v1.0 so gezeichnet.
 - **CH340C-VCC** hängt auf der **+5-V-Rail-Seite** (nach der Diode) → sowohl bei USB- als auch bei externer Versorgung sauber versorgt.
 - **Hinweis:** Im reinen USB-Betrieb (ohne J1-Netzteil) frisst der Vf ~0,3 V vom Rail. Für ESP-S3-LDO und MAX98357A unkritisch; falls die Platine mal *ausschließlich* über USB laufen soll (nicht nur flashen), Rail unter Last gegenmessen.
 
@@ -141,10 +144,10 @@ Das Modul **ESP32-S3-WROOM-1-N16R8** (16 MB Flash, **8 MB Octal-PSRAM**) führt 
 |------|--------------|------------|
 | **33–37** | **Octal-PSRAM** (wegen „R8") intern belegt | **nie verwenden** |
 | **26–32** | SPI-Flash | nicht verwendbar |
-| **19, 20** | **USB D-/D+** (nativ, USB-Serial/JTAG) | auf v07 **nicht belegt** (`nc`) → frei; native USB optional nachrüstbar |
-| **43, 44** | **UART0** TX/RX | auf v07 an **CH340C** (USB-UART-Brücke, Programmierung/Konsole via USB-C) |
+| **19, 20** | **USB D-/D+** (nativ, USB-Serial/JTAG) | **nicht belegt** (`nc`) → frei; native USB optional nachrüstbar |
+| **43, 44** | **UART0** TX/RX | an **CH340C** (X3, USB-UART-Brücke, Programmierung/Konsole via USB-C) |
 | **0** | Strapping (Boot) + BOOT-Taster | reserviert |
-| **3** | Strapping (JTAG-Quellwahl) | unkritisch bei USB-JTAG; hier 74HC595-`SER` (reiner Ausgang, kein externer Treiber) – Pulldown empfohlen |
+| **3** | Strapping (JTAG-Quellwahl) | unkritisch bei USB-JTAG; hier 74HC595-`SER` (reiner Ausgang) – **10-kΩ-Pulldown ab v1.0 bestückt** |
 | **45** | Strapping (VDD_SPI) | nicht für Peripherie |
 | **46** | Strapping (Boot/ROM-Messages) | nicht für Peripherie |
 
@@ -168,22 +171,22 @@ Das Modul **ESP32-S3-WROOM-1-N16R8** (16 MB Flash, **8 MB Octal-PSRAM**) führt 
 | **14** | I²S **DIN** (+DIP3) | OUT/IN | → MAX98357A DIN | DIP3 gemultiplext |
 | **4**  | **ADJUST**-Taster | IN | Taster gegen GND | Bedienung |
 | **5**  | **SET**-Taster | IN | Taster gegen GND | Bedienung |
-| **13** | **DIP-Read-Enable** | OUT | → DIP-Puffer (Tri-State) | gibt DIP1-3 auf 47/21/14 frei |
+| **13** | **DIP-Read-Enable** | OUT | → gemeinsamer Pol des DIP-Schalters S4 | HIGH = DIP1-3 auf 47/21/14 lesbar (Dioden, siehe 13.3) |
 | **17** | SPI3 **SCLK** | OUT | → 74HCT541 (→MAX) **und** direkt → MCP | HW-SPI3-Takt |
 | **8**  | SPI3 **MOSI** | OUT | → 74HCT541 (→MAX) **und** direkt → MCP | |
 | **7**  | SPI3 **MISO** | IN | ← MCP23S17 SO (3,3 V) | nur MCP treibt MISO |
-| **18** | **MAX7221 CS** (= LOAD-Pin) | OUT | → 74HCT541 (+Serien-R) → MAX7221 | aktiv-LOW; Latch mit steigender CS-Flanke |
-| **15** | **MCP23S17 /CS** | OUT | → MCP23S17 CS (3,3 V) | Pull-up nach 3,3 V |
+| **18** | **MAX7221 CS** (= LOAD-Pin) | OUT | → 74HCT541 (+Serien-R) → MAX7221 | aktiv-LOW; Latch mit steigender CS-Flanke; **R58 = 10 kΩ → 3,3 V** am 541-Eingang (siehe 11) |
+| **15** | **MCP23S17 /CS** | OUT | → MCP23S17 CS (3,3 V) | **R57 = 10 kΩ → 3,3 V** (siehe 11) |
 | **6**  | **MCP23S17 INT** | IN | ← MCP **INTA** (INTB bleibt offen) | 1 INT-Leitung; `IOCON.MIRROR` = 1 (siehe 9.3) |
-| **3**  | **74HC595 SER** | OUT | → 74HCT541 → 595 (Daten) | dedizierte Lampen-IOs; Strapping-Pin, Pulldown empfohlen |
+| **3**  | **74HC595 SER** | OUT | → 74HCT541 → 595 (Daten) | dedizierte Lampen-IOs; Strapping-Pin, **10 kΩ Pulldown → GND** |
 | **10** | **74HC595 SRCLK** | OUT | → 74HCT541 → 595 (Schiebetakt) | |
 | **9**  | **74HC595 RCLK** | OUT | → 74HCT541 → 595 (Latch) | |
 | **16** | **74HC595 /OE** | OUT | → 2N7002 → 595 `/OE` | invertiert; HIGH = Lampen an (siehe 6.1) |
 | **12** | **Spule 1** | OUT | → 74HCT541 → IRL540 #1 | |
 | **11** | **Spule 2** | OUT | → 74HCT541 → IRL540 #2 | |
 | 0 | BOOT | — | BOOT-Taster | reserviert |
-| 19/20 | USB (nativ) | — | **nicht belegt (`nc`)** | native USB-Serial/JTAG optional; auf v07 frei |
-| 43/44 | UART0 | OUT/IN | → **CH340C** (USB-UART) | Programmierung/Konsole via USB-C |
+| 19/20 | USB (nativ) | — | **nicht belegt (`nc`)** | native USB-Serial/JTAG optional; frei |
+| 43/44 | UART0 | OUT/IN | → **CH340C** (X3, USB-UART) | Programmierung/Konsole via USB-C |
 | 39–42 | **Reserve** | — | frei | JTAG-Pins, als GPIO nutzbar (dann kein JTAG-Debug) |
 
 **Festverdrahtete Steuerpins (kein GPIO nötig):**
@@ -193,7 +196,13 @@ Das Modul **ESP32-S3-WROOM-1-N16R8** (16 MB Flash, **8 MB Octal-PSRAM**) führt 
 - 74HCT541 `/OE1`, `/OE2` (Pin 1 + 19) → **GND** (Buffer immer aktiv).
 - MAX98357A `SD_MODE`/`GAIN` → per Widerstand (Kanalwahl (L+R)/2, Gain nach Wunsch).
 
-> **Bilanz:** 22 GPIOs belegt (1–18, 21, 38, 47, 48). Frei bleiben **GPIO 39–42** → **4 Reserve** am ESP (die JTAG-Pins MTCK/MTDO/MTDI/MTMS; als GPIO nutzbar, dann entfällt JTAG-Debug – die Konsole läuft ohnehin über den CH340). Auf v07 sind **IO19/20 (native USB) nicht belegt** → zusätzlich frei; **Programmierung/Konsole laufen über die CH340C-Brücke an UART0 (43/44)** am USB-C. BOOT (0) reserviert. Am MCP23S17 stehen **2 Reserve**-Eingänge zur Verfügung.
+> **Bilanz:** 22 GPIOs belegt (1–18, 21, 38, 47, 48). Frei bleiben **GPIO 39–42** → **4 Reserve** am ESP (die JTAG-Pins MTCK/MTDO/MTDI/MTMS; als GPIO nutzbar, dann entfällt JTAG-Debug – die Konsole läuft ohnehin über den CH340). **IO19/20 (native USB) sind nicht belegt** → zusätzlich frei; **Programmierung/Konsole laufen über die CH340C-Brücke an UART0 (43/44)** am USB-C. BOOT (0) reserviert. Am MCP23S17 stehen **2 Reserve**-Eingänge zur Verfügung.
+
+**Referenz-Designatoren (Schaltplan v1.0):** ESP32-S3 = `IC5` · 74HC595 = `IC1`–`IC4` ·
+AMS1117-3.3 = `IC6` · 74HCT541 = `IC7` · MCP23S17 = `X1` · CH340C = `X3` · MAX7221 = `X4` ·
+MAX98357A = `M1` · 2N7002 (595-`/OE`) = `T33` · IRL540 = `Q1`/`Q2` · SS24 = `D4` ·
+CS-Pull-ups = `R57` (GPIO15) / `R58` (GPIO18).
+*(In v07 hießen dieselben Bausteine teils anders – siehe Abschnitt 14.)*
 
 ---
 
@@ -216,19 +225,17 @@ Alle 8 Kanäle belegt. Die SPI3-Leitungen SCLK/MOSI gehen **zusätzlich** direkt
 
 ### 6.1 595-`/OE` über 2N7002 (statt 9. Kanal)
 
-Würde `/OE` ebenfalls über den 74HCT541 laufen, wären **9** Leitungen nötig → ein zweiter IC. Stattdessen ein **2N7002** (kleiner logic-level N-MOSFET) als Open-Drain-Treiber:
+Würde `/OE` ebenfalls über den 74HCT541 laufen, wären **9** Leitungen nötig → ein zweiter IC. Stattdessen ein **2N7002** (`T33`, kleiner logic-level N-MOSFET) als Open-Drain-Treiber:
 
 ```
-ESP GPIO16 ──[ 10k Pulldown → GND ]
-     │
-     └──► Gate 2N7002      Drain ──┬──► 595 /OE
-                                    └──[ 10k Pull-up → +5 V ]
-                           Source ──► GND
+ESP GPIO16 ──[ 100 Ω ]──┬──► Gate T33 (2N7002)   Drain ──┬──► 595 /OE
+                        │                                └──[ 10k Pull-up → +5 V ]
+                        └──[ 10k Pulldown → GND ]  Source ──► GND
 ```
 
 - **GPIO16 HIGH** → FET leitet → `/OE` = LOW → **Lampen aktiv**.
 - **GPIO16 LOW / Boot (Hi-Z)** → FET sperrt → Pull-up zieht `/OE` = 5 V → **Lampen aus**.
-- Der Gate-Pulldown sorgt beim Boot (GPIO16 noch Eingang) für sicheres Sperren → **Boot-Blanking bleibt erhalten**.
+- Der Gate-Pulldown sorgt beim Boot (GPIO16 noch Eingang) für sicheres Sperren → **Boot-Blanking bleibt erhalten**. Er sitzt im Schaltplan v1.0 **hinter** dem 100-Ω-Serienwiderstand, also direkt am Gate-Knoten – dort, wo er wirkt. *(In v07 fehlte er, Review-Punkt 3.)*
 - Der ESP-Pin sieht nie 5 V (durch den FET entkoppelt) → kein Problem mit fehlender 5-V-Toleranz.
 - **PWM-Dimmen** weiter möglich (invertiertes Duty auf GPIO16); Anstiegsflanke über das RC aus Pull-up + Gate-Kapazität – für globale Lampenhelligkeit unkritisch.
 
@@ -268,19 +275,40 @@ ESP GPIO16 ──[ 10k Pulldown → GND ]
 
 ## 8. MAX7221 – Displays (8× 7-Segment, common cathode, gemultiplext)
 
-### 8.1 Die vorhandene Display-Architektur (aus `datasheets/Display.jpg`)
+### 8.1 Display-Architektur und Belegung des Steckers J2
 
-Die 8 Ziffern sind **fest als gemultiplexte 8×8-Matrix** verdrahtet – nicht statisch. Das gibt der Original-Stecker (`K6`, 34-poliger Wannenstecker) vor:
+Die 8 Ziffern sind **fest als gemultiplexte 8×8-Matrix** verdrahtet – nicht statisch. Das gibt der Original-Stecker (34-poliger Wannenstecker) vor; auf der Steuerplatine ist das **J2**.
 
-| Ribbon-Pins | Signal | Bedeutung |
-|-------------|--------|-----------|
-| 19, 21, 23, 25, 27, 29, 31, 33 (ungerade) | 19=dP2, 21=g, 23=f, 25=e, 27=d, 29=c, 31=b, **33=a** | **8 Segmentleitungen**, über alle Ziffern gemeinsam (Segment-Bus) – Reihenfolge **absteigend** (dP2→a) laut `Display.jpg`, so auch im Schaltplan verdrahtet |
-| 2, 4, 6, 8, 10, 12, 14, 16 (gerade) | Bip 1er/10er · Credit 1er/10er · Score 1er/10er/100er/1000er | **8 Digit-Auswahlleitungen** (je ein Common pro Ziffer) |
-| dazwischenliegende Pins | GND / Rückleiter | Signal–GND–Signal–GND verschachtelt |
+> **Maßgeblich ist `datasheets/Kegelautomat_v10_SCH.PDF`.** Die Belegung wurde in Revision
+> **v1.0 korrigiert**: Gegenüber v07 sind alle Signale in die jeweils **andere Pin-Reihe
+> derselben Spalte** gewandert (Digits von den geraden auf die ungeraden Pins, Segmente
+> umgekehrt). Die früher als GND angenommenen Gegenpins sind **`nc`** – eine
+> Masse-Verschachtelung gibt es in der Original-Verdrahtung nicht.
 
+| J2-Pin | Netz | Ziffer / Segment |
+|:------:|------|------------------|
+| 1  | `DIG_1` | Bip 1er |
+| 3  | `DIG_5` | Bip 10er |
+| 5  | `DIG_7` | Credit 1er |
+| 7  | `DIG_3` | Credit 10er |
+| 9  | `DIG_2` | Score 1er |
+| 11 | `DIG_6` | Score 10er |
+| 13 | `DIG_4` | Score 100er |
+| 15 | `DIG_0` | Score 1000er |
+| 20 | `SEG_DP` | dP2 |
+| 22 | `SEG_G` | g |
+| 24 | `SEG_F` | f |
+| 26 | `SEG_E` | e |
+| 28 | `SEG_D` | d |
+| 30 | `SEG_C` | c |
+| 32 | `SEG_B` | b |
+| 34 | `SEG_A` | a |
+| 2, 4, 6, 8, 10, 12, 14, 16, 17, 18, 19, 21, 23, 25, 27, 29, 31, 33 | — | **`nc`** (nicht beschaltet) |
+
+- **8 Segmentleitungen** (`SEG_A`…`SEG_DP`), über alle Ziffern gemeinsam (Segment-Bus) – im Stecker in **absteigender** Reihenfolge (dP2 → a), also Pin 20 = dP2 … Pin 34 = a.
+- **8 Digit-Auswahlleitungen** (`DIG_0`…`DIG_7`), je ein Common pro Ziffer. Die Zuordnung ist bewusst „verwürfelt" – für die Firmware ist die Spalte **Ziffer** maßgeblich, nicht die Pin-Nummer. Diese Zuordnung `DIG_n` → Ziffer ist **unverändert gegenüber v07**; nur die Steckerpins haben sich verschoben.
 - Die 8 Ziffern liegen physisch auf **3 Platinen** (2× Bip, 2× Credit, 4× Score = **2×2 + 1×4**), alle über **ein ~1 m langes 34-poliges Flachbandkabel** angebunden.
 - Segmente über alle Ziffern zusammengefasst → **klassische Multiplex-Matrix** (8 SEG + 8 DIG) = exakt die MAX7221-Topologie. Statischer Betrieb wäre für das lange Kabel elektrisch besser, ist mit dieser Verdrahtung aber **nicht** möglich (bräuchte 64 Einzel-Segmentleitungen und neue Display-Platinen).
-- **Wichtig:** Die verschachtelten Masse-Rückleiter des 34-poligen Bands sind kein Zufall – sie geben dem Flachband ~100–130 Ω Wellenwiderstand und machen Multiplex über ~1 m erst gutmütig. **Beim Neuaufbau beibehalten.**
 
 ### 8.2 Warum MAX7221 statt MAX7219 (Variante B)
 
@@ -303,9 +331,9 @@ Der Treiber bleibt auf der **Hauptplatine**, die 16 Matrixleitungen laufen über
    > **Einordnung:** Diese drei Leitungen laufen in Variante B **nicht** über das Band – 541 und MAX7221 sitzen wenige Zentimeter voneinander auf der Hauptplatine. Bei ~5–8 ns Flankenzeit des 74HCT541 und ~6 ns/m auf FR4-Microstrip liegt die Grenze „elektrisch kurz" (l < t_r / 6·t_pd) bei **≈ 17 cm** – die Strecke ist also um eine Größenordnung unkritisch, Reflexionen sind hier kein Thema (Reflexionen hängen an der Flankensteilheit, nicht am Takt). Die Widerstände bleiben trotzdem bestückt: Sie kosten nichts, dämpfen Flanken und Abstrahlung, und das Timing bleibt entspannt (100 Ω gegen ~30 pF ≈ 3 ns; die MAX-Eingänge haben 1 V Hysterese). **Zwingend** werden sie erst bei **Variante A**, wo `DIN/CLK/CS` über die 1 m gehen (siehe Kasten am Ende von Abschnitt 8).
 2. **SPI-Takt für den MAX auf ~1 MHz** (in ESP-IDF pro Device über `clock_speed_hz` im `spi_device_interface_config_t`). Für 8 Digits reicht das dicke; langsamere Flanken über 1 m sind ein Geschenk. Der MCP23S17 darf am selben SPI3-Bus weiter mit 8–10 MHz laufen – der Treiber schaltet die Rate pro Transaktion um.
 3. **RSET eher moderat** wählen: kleinerer Segment-Spitzenstrom = weniger Umladung auf den langen Adern = weniger Ghosting. (Ghosting-Mechanismus: Das Band hat ~50 pF/m zwischen den Adern, also ~50 pF je Ader auf 1 m. Beim Digit-Wechsel lädt sich diese Kapazität um und lässt die Nachbarziffer schwach nachleuchten – der Klassiker bei abgesetzten Multiplex-Displays.)
+   > **Wichtig seit v1.0:** Da im Band **keine** Masse-Rückleiter zwischen den Signaladern liegen (alle Gegenpins von J2 sind `nc`, siehe 8.1), koppeln benachbarte Adern direkt aufeinander. Das Übersprechen – und damit die Ghosting-Neigung – ist höher als bei einem verschachtelten Band. Das macht diesen Punkt (moderates RSET) und den langsamen SPI-Takt wichtiger, nicht optional.
 4. **Abblockung direkt am MAX7221:** 10 µF Elko **+** 100 nF Keramik an V+/GND (die Digit-Treiber ziehen im Multiplex kräftige Spitzen – das ist die eigentliche Störquelle). **Beide GND-Pins (4 und 9) anschließen** (wird gern übersehen), durchgehende Massefläche unter den Signalleitungen.
-5. **Masse-Verschachtelung des 34-poligen Bands beibehalten** (Signal–GND–Signal–GND, siehe 8.1).
-6. **Original-„Widerstände"-Platine entfernen/überbrücken:** Der MAX7221 ist eine **Konstantstromquelle** (Strom kommt aus RSET). Serienwiderstände in den SEG-/DIG-Leitungen fressen nur die ohnehin knappe Spannungsreserve bei V+ = 5 V – dort **keine** Widerstände.
+5. **Original-„Widerstände"-Platine entfernen/überbrücken:** Der MAX7221 ist eine **Konstantstromquelle** (Strom kommt aus RSET). Serienwiderstände in den SEG-/DIG-Leitungen fressen nur die ohnehin knappe Spannungsreserve bei V+ = 5 V – dort **keine** Widerstände.
 
 ### 8.5 Konfiguration (identisch zum MAX7219)
 
@@ -327,7 +355,7 @@ Der Treiber bleibt auf der **Hauptplatine**, die 16 Matrixleitungen laufen über
 
 > **Restrisiko & Rückfallebene:** Multiplex über ~1 m kann trotz aller Maßnahmen ein Rest-Ghosting zeigen. Das Datenblatt (S. 10) empfiehlt ausdrücklich das Gegenteil von Variante B: *„The MAX7219/MAX7221 should be placed in close proximity to the LED display, and connections should be kept as short as possible to minimize the effects of wiring inductance and electro-magnetic interference."* Falls sich Ghosting im Betrieb zeigt, ist die saubere Lösung (**Variante A**) den MAX7221 auf eine kleine Platine **ins Display-Gehäuse** zu setzen – dann laufen nur noch `DIN/CLK/CS/5 V/GND` über die 1 m, die 16 Matrixleitungen bleiben kurz und die 320-mA-Digit-Pulse bleiben beim Display. Die Firmware bliebe unverändert.
 >
-> **Was bei Variante A mitwandert:** `RSET` und vor allem die Abblockung (10 µF + 100 nF, laut Datenblatt „as close to the device as possible") gehören dann auf die Display-Platine, ebenso beide GND-Pins. Und **erst dann** sind die Serien-R (68–100 Ω) in `CLK/DIN/CS` elektrisch wirklich nötig: Über 1 m ist die Leitung elektrisch lang, unterminiert gibt es Ringing. Das Flachband mit alternierendem Masse-Draht liegt bei ~100–130 Ω Wellenwiderstand, der 74HCT541 bei ~40 Ω Ausgangsimpedanz → 68–100 Ω passen gut dazu.
+> **Was bei Variante A mitwandert:** `RSET` und vor allem die Abblockung (10 µF + 100 nF, laut Datenblatt „as close to the device as possible") gehören dann auf die Display-Platine, ebenso beide GND-Pins. Und **erst dann** sind die Serien-R (68–100 Ω) in `CLK/DIN/CS` elektrisch wirklich nötig: Über 1 m ist die Leitung elektrisch lang, unterminiert gibt es Ringing. Der Wellenwiderstand eines Flachbands liegt je nach Masseführung grob bei ~100–150 Ω (ohne definierten Rückleiter – wie hier, siehe 8.1 – eher am oberen Ende und schlechter definiert), der 74HCT541 bei ~40 Ω Ausgangsimpedanz → 68–100 Ω sind eine brauchbare Dämpfung. Bei Variante A böte es sich zusätzlich an, für `CLK/DIN/CS` je eine benachbarte Ader des Bands als Masse-Rückleiter zu belegen – bei nur 5 Signalen ist im 34-poligen Band reichlich Platz.
 
 ---
 
@@ -371,7 +399,7 @@ Maßgeblich ist `datasheets/Kegelautomat_Steckerbelegung.xlsx` (Blatt „Stecker
 | GPA3 | SW11 | J4-4  | Münzer NO ⚠ |
 | GPA4 | SW12 | J4-3  | Münzer NC ⚠ |
 | GPA5 | SW13 | J4-2  | SLAM-Kontakt (NO) ⚠ |
-| GPA6, GPA7 | – | – | **Reserve**, auf v07 `nc` (nicht auf Header geführt) |
+| GPA6, GPA7 | – | – | **Reserve**, `nc` (nicht auf Header geführt) |
 
 > **Bilanz:** **13 belegte Kontakte** (Kontakt 1–9, Start, Münzer NO/NC, SLAM)
 > + **1 Reserve auf dem Header** (SW14, GPB7) + **2 Reserve `nc`** (GPA6/7) = 16 IO.
@@ -398,9 +426,14 @@ Die Kegel-/Zahl-/Kontakt-Reihenfolge auf dem Spielfeld ist von links nach rechts
 
 **Funktion der Münz-Weiche:** Die Spulen stellen beim Münzeinwurf die Weiche. Im **stromlosen („Aus"-)Zustand fallen die Münzen durch** – der Automat nimmt kein Geld an. Erst die bestromte Spule leitet die Münze in den Annahmeweg. Das macht „Spule aus" zum sicheren Grundzustand (siehe Abschnitt 11).
 
-- **ESP-Ausgang** (GPIO12/11) HIGH → 74HCT541 (5 V) → **IRL540-Gate** → Spule (24 V) low-side eingeschaltet.
-- **Gate-Pulldown (z. B. 10 kΩ)** je IRL540 → definierter Aus-Zustand bei Boot / vor Firmware-Init (die ESP-Ausgänge sind vor der Init hochohmige Eingänge).
-- **Freilaufdiode zwingend** je Spule (z. B. UF4007/1N4007, Kathode an +24 V, Anode an Drain) – schützt den IRL540 vor der Induktionsspannung beim Abschalten.
+- **ESP-Ausgang** (GPIO12/11) HIGH → 74HCT541 (5 V) → **IRL540-Gate** (100 Ω Serien-R) → Spule (24 V) low-side eingeschaltet.
+- **Gate-Pulldown 10 kΩ** je IRL540 (`Q1`/`Q2`) → definierter Aus-Zustand bei Boot / vor Firmware-Init (die ESP-Ausgänge sind vor der Init hochohmige Eingänge).
+
+**24-V-Zweig und Freilaufdioden liegen außerhalb dieser Platine** (Review-Punkte 1 und 2, so gelöst ab v1.0):
+
+- Die **24-V-Versorgung** kommt von einer **separaten Platine**; auf der Steuerplatine existiert kein 24-V-Netz. Deren GND muss mit dem Platinen-GND verbunden sein, sonst hat der IRL540 keinen Rückweg.
+- Die **Freilaufdiode** sitzt **direkt an der Spule** (Kathode an +24 V, Anode an den Drain-Anschluss) – dort, wo sie die Abschaltspitze am kürzesten kurzschließt. Ohne sie sieht der IRL540 Spitzen ≫ 100 V (V_DS max).
+- ⚠ **Achtung beim Verdrahten:** Die Klemmen **SP1/SP2 führen an *beiden* Polen dasselbe Netz** – nämlich den **IRL540-Drain** (`D_2` bzw. `D_3`). Sie sind **kein** Spulenanschluss mit +24 V und Drain, sondern nur ein doppelt herausgeführter Drain. Die +24-V-Seite der Spule wird an der externen 24-V-Platine angeschlossen, **nicht** an SP1/SP2.
 
 ---
 
@@ -427,63 +460,62 @@ Definierte, ungefährliche Zustände von Power-on bis Firmware-Init:
 
 | Element | Maßnahme | Zustand beim Boot |
 |---------|----------|-------------------|
-| Lampen | 2N7002 sperrt (Gate-Pulldown) → 595-`/OE` per Pull-up auf 5 V → Ausgänge hochohmig + Gate-Pulldowns | **alle aus** |
+| Lampen | 2N7002 (`T33`) sperrt (10 kΩ Gate-Pulldown) → 595-`/OE` per Pull-up auf 5 V → Ausgänge hochohmig + Gate-Pulldowns | **alle aus** |
 | Spulen | IRL540-Gate-Pulldowns; ESP-Ausgänge (12/11) nach Reset hochohmig | **alle aus** → Münzen fallen durch (sicherer Zustand, siehe 9.4) |
 | Display | MAX7221 startet im Shutdown (Datasheet) | **dunkel** |
 | MCP | `/RESET` fest auf 3,3 V; Register-Defaults = alle Pins Eingang | keine ungewollten Ausgänge |
-| **SPI3-`CS`** | **derzeit ungesichert** – GPIO18/GPIO15 sind bis `spibus_init()` hochohmig, der 74HCT541 macht daraus einen beliebigen 5-V-Pegel | **undefiniert**, siehe Kasten unten |
+| **SPI3-`CS`** | **`R57`/`R58` je 10 kΩ → 3,3 V** an GPIO15 (MCP) bzw. am 541-**Eingang** von GPIO18 (MAX) | **sicher HIGH** → kein Baustein schiebt ein |
 | Sound | I²S-Pins vor Init hochohmig; MAX98357A liefert ohne Takt kein Signal | **still** |
-| Strapping | GPIO0/3/45/46 in definiertem Zustand | normaler Flash-Boot |
+| Strapping | GPIO0/3/45/46 in definiertem Zustand; GPIO3 (`SER`) mit 10 kΩ Pulldown | normaler Flash-Boot |
 
-> **Lücke im Boot-Konzept – bei der Inbetriebnahme am 2026-07-28 gefunden (Review-Punkt 8):**
-> Für Lampen, Spulen, MCP-Register und Audio gibt es je einen definierten Boot-Zustand,
-> für die beiden SPI3-Chip-Selects **nicht**. GPIO18 (MAX7221-`CS`) und GPIO15
-> (MCP23S17-`CS`) sind bis `spibus_init()` hochohmig; der 74HCT541 (Kanal 3) macht daraus
-> einen beliebigen 5-V-Pegel. Liegt `CS` dabei LOW, schiebt der MAX7221 Störflanken von
-> `CLK`/`DIN` als Frame ein und übernimmt sie mit der nächsten steigenden CS-Flanke.
+> **Historie: die SPI3-`CS`-Lücke – gefunden 2026-07-28, in v1.0 behoben (Review-Punkt 8).**
+> Bis v07 hatten die beiden Chip-Selects als einzige Signale **keinen** definierten
+> Boot-Zustand: GPIO18 (MAX7221-`CS`) und GPIO15 (MCP23S17-`CS`) sind bis `spibus_init()`
+> hochohmig, der 74HCT541 (Kanal 3) machte daraus einen beliebigen 5-V-Pegel. Lag `CS` dabei
+> LOW, schob der MAX7221 Störflanken von `CLK`/`DIN` als Frame ein und übernahm sie mit der
+> nächsten steigenden CS-Flanke.
 >
-> **Beobachtet:** Nach dem Einschalten leuchteten alle 8 Ziffern kurz hell als `8`, bis die
-> Firmware die Anzeige übernahm – die Signatur des **Display-Test-Registers**, das laut
-> Datenblatt *„all controls and digit registers (including the shutdown register)"*
-> übersteuert und bis zum Zurückschreiben aktiv bleibt. Der POR-Zustand scheidet als
-> Erklärung aus (dort: geblankt, Shutdown, Scan-Limit 1 Digit, Intensity **Minimum**).
+> **Symptom am realen Aufbau:** Nach dem Einschalten leuchteten alle 8 Ziffern kurz hell als
+> `8` – die Signatur des **Display-Test-Registers**, das laut Datenblatt *„all controls and
+> digit registers (including the shutdown register)"* übersteuert und bis zum Zurückschreiben
+> aktiv bleibt. Der POR-Zustand schied als Erklärung aus (dort: geblankt, Shutdown,
+> Scan-Limit 1 Digit, Intensity **Minimum**). Beim MCP23S17 wog derselbe Punkt schwerer: ein
+> Zufallsframe hätte `IODIR` umstellen und Eingänge zu Ausgängen machen können, die gegen die
+> Kontaktschalter treiben.
 >
-> **Fix Hardware:** je **10 kΩ Pull-up nach 3,3 V**, beide auf der **ESP-Seite**:
-> - **GPIO18** (MAX7221-`CS`) läuft über den 541 (Kanal 3) – der Pull-up gehört an den
->   541-**Eingang**. Am 541-*Ausgang* wäre er wirkungslos, weil der bei `/OE` = GND aktiv treibt.
-> - **GPIO15** (MCP23S17-`CS`) geht **nicht** über den 541, sondern direkt an den MCP
->   (3,3 V, Abschnitt 6) – der Pull-up gehört einfach an dieses Netz.
+> **Behoben in Revision v1.0** durch `R57`/`R58` (je 10 kΩ nach **3,3 V**, nie 5 V – der S3 ist
+> nicht 5-V-tolerant), beide auf der ESP-Seite: `R58` am 541-**Eingang** von GPIO18 (am
+> 541-*Ausgang* wäre er wirkungslos, der treibt bei `/OE` = GND aktiv), `R57` direkt am Netz
+> GPIO15, das ungepuffert zum MCP läuft. `CLK`/`DIN` (GPIO17/8) floaten beim Boot weiterhin,
+> brauchen aber keinen Pull-up – solange `CS` sicher HIGH liegt, schiebt keiner der beiden
+> Bausteine etwas ein.
 >
-> In beiden Fällen auf **3,3 V**, nie auf 5 V: der S3 ist nicht 5-V-tolerant.
-> `CLK`/`DIN` (GPIO17/8) floaten beim Boot ebenfalls, brauchen aber keinen Pull-up –
-> solange `CS` sicher HIGH liegt, schiebt keiner der beiden Bausteine etwas ein.
->
-> **Fix Firmware (bereits umgesetzt):** `spibus_park_cs()` legt beide CS-Leitungen als
-> allererstes in `app_main()` auf HIGH; die Display-Initialisierung läuft vor der SD-Karte,
-> damit das Display-Test-Register früh zurückgeschrieben wird. Das schließt das Fenster ab
-> `app_main()`, nicht aber die Bootloader-Zeit davor – dafür braucht es die Pull-ups.
->
-> Beim MCP23S17 wiegt derselbe Punkt schwerer: ein Zufallsframe könnte `IODIR` umstellen und
-> Eingänge zu Ausgängen machen, die gegen die Kontaktschalter treiben.
+> **Firmwareseitig zusätzlich abgesichert:** `spibus_park_cs()` legt beide CS-Leitungen als
+> allererstes in `app_main()` auf HIGH; die Display-Initialisierung läuft vor der SD-Karte.
+> Das deckt das Fenster ab `app_main()`, die Pull-ups zusätzlich die Bootloader-Zeit davor.
 
 ---
 
 ## 12. Offene Punkte & Empfehlungen
 
-1. **5-V-Netzteil dimensionieren** – bestimmt durch den Summenstrom der 30 Lampen (Lampenstrom messen) plus MAX98357A-Spitzen. Reserve einplanen.
-2. **Freilaufdioden** an beiden Spulen nicht vergessen (24 V, induktiv).
-3. **IRL540 real prüfen:** Spulenstrom messen und gegen die Transfer-Kennlinie bei V_GS = 5 V gegenchecken. Bei hohen Strömen ggf. auf einen MOSFET mit niedrigerem R_DS(on) bei 5 V wechseln.
-4. **Entkopplung:** je IC 100 nF nahe an VCC/VDD; zusätzlich Elkos an den 5-V- und 24-V-Rails. Getrennte GND-Führung (Leistungs-GND der Lampen/Spulen **und** Audio-GND sternförmig zum Logik-GND). Zur Entkopplung von USB-VBUS gegen das externe 5-V-Netzteil (SS24) siehe **Abschnitt 3.2**.
-5. **Reserve:** am ESP **4** (GPIO 39–42, JTAG-Pins – als GPIO nutzbar; zusätzlich IO19/20, siehe Abschnitt 5), am MCP23S17 **2** Eingänge frei (GPA6/7, auf v07 `nc`).
-6. **DIP-Multiplexing prüfen:** DIP1-3 liegen auf den I²S-Leitungen (47/21/14), freigegeben über GPIO13. Die DIPs nur einlesen, wenn I²S ruht (z. B. beim Start); der DIP-Puffer muss im I²S-Betrieb sicher **hochohmig** sein, damit er die Audio-Leitungen nicht belastet.
-7. **DIP-Puffer an 3,3 V betreiben** – die DIP-Leitungen treiben direkt in den ESP (47/21/14), und der S3 ist **nicht 5-V-tolerant**. Ein Puffer am 5-V-Rail würde die Pins zerstören. Beim Layout festlegen und prüfen.
-8. **Pulldown an GPIO3 (595-`SER`)** – GPIO3 ist Strapping-Pin (JTAG-Quellwahl) und floatet beim Boot. Ein 10-kΩ-Pulldown definiert gleichzeitig den Strapping-Zustand und den `SER`-Eingang des 74HCT541. Unkritisch (das Boot-Blanking über `/OE` hält die Lampen ohnehin aus), aber billige Absicherung.
-9. **595-`/OE` invertiert:** Firmware beachten – GPIO16 = HIGH schaltet Lampen ein (2N7002, siehe 6.1).
-10. **Kontakte physisch:** Pin-Zuordnung liegt in `datasheets/Kegelautomat_Steckerbelegung.xlsx` (Blatt „Stecker") und ist in Abschnitt 9.2 übernommen. Offen bleibt nur die Reihenfolge von SW10–SW13 innerhalb GPA2–GPA5 (siehe 9.2).
-11. **Audio:** SD-Karten-Slot, MAX98357A-Modul (Gain/Kanal per Widerstand) und Lautsprecher einplanen; Details in Abschnitt 13.
-12. **Display-Kabel (Variante B):** Serien-R (68–100 Ω) an CLK/DIN/CS vorsehen, SPI-Takt des MAX auf ~1 MHz, Abblockung + beide GND-Pins am MAX7221, RSET moderat, Masse-Verschachtelung des 34-poligen Bands beibehalten, Original-„Widerstände"-Platine entfernen (Konstantstromquelle). Falls Rest-Ghosting auftritt → Variante A (MAX7221 ins Display-Gehäuse). Siehe Abschnitt 8.
-13. **Common cathode:** Für den gewählten **SC08-11EWA lt. Datenblatt bestätigt** (Common Cathode, rechter DP) – passt zum MAX7221 (common-cathode-only). Bei abweichenden Digit-Typen vorher gegenprüfen. RSET = **12 kΩ** (nicht 10 kΩ) für ~40 mA bei V_F ≈ 2 V (siehe Abschnitt 8.5/8.6).
-14. **Pull-ups an den SPI3-`CS`-Leitungen** – je 10 kΩ nach 3,3 V, an den 541-**Eingang** von GPIO18 (MAX7221) und direkt an das Netz GPIO15 (MCP23S17, hängt nicht am 541). Ohne sie sind beide Chip-Selects bis `spibus_init()` undefiniert; der MAX7221 fing sich dabei einen Störframe ein (heller Segmentblitz beim Einschalten, gefunden 2026-07-28). Details im Kasten am Ende von Abschnitt 11, Review-Punkt 8.
+**Noch offen:**
+
+1. **5-V-Netzteil dimensionieren** – bestimmt durch den Summenstrom der 30 Lampen (Lampenstrom messen) plus MAX98357A-Spitzen. Reserve einplanen. Dazu die **Ampacity** prüfen: je Lampen-Header nur **ein** +5-V-Pin (J7 versorgt ~10 Lampen), und J1-Pin4 trägt den gesamten Board-Strom über einen einzelnen 2,54-mm-Pin.
+2. **IRL540 real prüfen:** Spulenstrom messen und gegen die Transfer-Kennlinie bei V_GS = 5 V gegenchecken. Bei hohen Strömen ggf. auf einen MOSFET mit niedrigerem R_DS(on) bei 5 V wechseln.
+3. **Kontakte physisch:** Pin-Zuordnung liegt in `datasheets/Kegelautomat_Steckerbelegung.xlsx` (Blatt „Stecker") und ist in Abschnitt 9.2 übernommen. Offen bleibt nur die Reihenfolge von SW10–SW13 innerhalb GPA2–GPA5 (siehe 9.2).
+4. **Ghosting am Display beobachten:** Im 34-poligen Band liegen ab v1.0 **keine** Masse-Rückleiter zwischen den Signaladern (siehe 8.1). Falls Rest-Ghosting auftritt → Variante A (MAX7221 ins Display-Gehäuse), siehe Kasten am Ende von Abschnitt 8.
+
+**Dauerhaft zu beachten (kein offener Punkt, sondern Betriebsregel):**
+
+5. **Entkopplung:** je IC 100 nF nahe an VCC/VDD; zusätzlich Elkos am 5-V-Rail. Getrennte GND-Führung (Leistungs-GND der Lampen/Spulen **und** Audio-GND sternförmig zum Logik-GND). Zur Entkopplung von USB-VBUS gegen das externe 5-V-Netzteil (D4/SS24) siehe **Abschnitt 3.3**.
+6. **Reserve:** am ESP **4** (GPIO 39–42, JTAG-Pins – als GPIO nutzbar; zusätzlich IO19/20, siehe Abschnitt 5), am MCP23S17 **2** Eingänge frei (GPA6/7, `nc`).
+7. **DIP-Multiplexing:** DIP1-3 liegen auf den I²S-Leitungen (47/21/14), gelesen über GPIO13. Die DIPs nur einlesen, wenn I²S ruht (beim Start). Die Entkopplung übernehmen **drei Dioden** am DIP-Schalter (siehe 13.3) – kein Tri-State-Puffer; der frühere Punkt „DIP-Puffer an 3,3 V betreiben" ist damit gegenstandslos, die Lösung ist inhärent 3,3-V-sicher.
+8. **595-`/OE` invertiert:** Firmware beachten – GPIO16 = HIGH schaltet Lampen ein (2N7002, siehe 6.1).
+9. **Audio:** MAX98357A-Modul – nur verifizieren, dass `SD_MODE` nicht auf 0 V (Shutdown) hängt und die Kanalwahl (L+R)/2 stimmt; Details in Abschnitt 13.1.
+10. **Display-Kabel (Variante B):** Serien-R (68–100 Ω) an CLK/DIN/CS, SPI-Takt des MAX auf ~1 MHz, Abblockung + beide GND-Pins am MAX7221, RSET moderat, Original-„Widerstände"-Platine entfernen (Konstantstromquelle). Siehe Abschnitt 8.
+11. **Common cathode:** Für den gewählten **SC08-11EWA lt. Datenblatt bestätigt** (Common Cathode, rechter DP) – passt zum MAX7221 (common-cathode-only). Bei abweichenden Digit-Typen vorher gegenprüfen. RSET = **12 kΩ** (nicht 10 kΩ) für ~40 mA bei V_F ≈ 2 V (siehe Abschnitt 8.5/8.6).
+
+**In Revision v1.0 erledigt** (Details in Abschnitt 14 und `Review_v10.md`): Freilaufdioden an den Spulen · 24-V-Versorgung · 2N7002-Gate-Pulldown · USB-VBUS-Entkopplung · SPI3-`CS`-Pull-ups · GPIO3-Pulldown · Belegung des Displaysteckers J2.
 
 ---
 
@@ -540,11 +572,19 @@ SD-Karte (WAV) ──SPI2──► ESP32-S3 ──I²S (LRC/BCLK/DIN)──► M
 - Eigener SPI-Host (SPI2), damit das Nachladen der Audio-Daten das Display-/Kontakt-Timing (SPI3) nicht bremst.
 - Dateisystem FAT; die Effekt-/Sound-Files (WAV) liegen als Dateien auf der Karte und lassen sich ohne Re-Flash austauschen.
 
-### 13.3 DIP-Schalter (gemultiplext)
+### 13.3 DIP-Schalter (gemultiplext, Diodenentkopplung)
 
-Drei DIP-Schalter (DIP1-3) teilen sich die I²S-Leitungen (GPIO47/21/14). Ein Puffer/Tri-State, freigegeben über **GPIO13 (READ_DIP)**, legt die DIP-Zustände nur **auf Anforderung** auf diese Leitungen – typischerweise beim Start, bevor I²S aktiv ist. Im laufenden Audio-Betrieb ist der Puffer hochohmig.
+Drei DIP-Schalter (DIP1-3, Codierschalter `S4` SD03) teilen sich die I²S-Leitungen (GPIO47/21/14). Statt eines Tri-State-Puffers – so stand es in früheren Fassungen dieser Doku – setzt die Platine **drei Entkopplungsdioden** ein (`D1`–`D3`, 1N4148W):
 
-> **Wichtig:** Der DIP-Puffer muss aus **3,3 V** versorgt werden – er treibt direkt auf ESP-Pins, und der S3 ist nicht 5-V-tolerant (siehe Abschnitt 12, Punkt 7).
+```
+ESP-Pin (LRC/BCLK/DIN) ◄──|◄── DIP-Schalter S4 ──► gemeinsamer Pol = GPIO13 (READ_DIP)
+                    Kathode    Anode
+```
+
+- **Einlesen:** GPIO13 als Ausgang **HIGH**. Ein geschlossener DIP zieht den zugehörigen ESP-Pin über die Diode auf ~2,6 V (3,3 V − U_F) = High; der ESP-Pin ist dabei Eingang mit **internem Pulldown**, ein offener DIP liest LOW.
+- **Audio-Betrieb:** GPIO13 auf **LOW** (oder Eingang). Die Dioden sind dann in Richtung Schalter gesperrt, sobald die I²S-Leitung High führt – die Audio-Leitungen werden **nicht** belastet, und der DIP-Zweig kann nichts in sie einspeisen.
+- **Inhärent 3,3-V-sicher:** Am gesamten Zweig sind nur ESP-Pins und die Dioden beteiligt, kein 5-V-Baustein. Die frühere Anforderung „DIP-Puffer muss an 3,3 V hängen" entfällt damit ersatzlos.
+- Die DIPs deshalb **beim Start lesen, bevor der I²S-Kanal angelegt wird**.
 
 **Firmware:** Die Audiokette ist umgesetzt – WAV-Dateien (PCM, 16 Bit) von SD über den
 ESP-IDF-Treiber `i2s_std` an den MAX98357A, siehe `main/audio.c` im Firmware-Repository
@@ -555,11 +595,54 @@ gelesen, *bevor* der I²S-Kanal angelegt wird.
 
 ---
 
+## 14. Platinenrevisionen
+
+### v1.0 (2026-07-29) – aktuell
+
+Behebt die HW-Punkte aus `Review_v07.md`; die Verifikation an Schaltplan und Stückliste steht
+in `Review_v10.md`. **141 Bauteile, 34 Gruppen** (`datasheets/iBOM_Kegelautomat_v10.html`).
+**Keine GPIO-Änderung** – die Firmware ist nicht betroffen.
+
+| Änderung | Umsetzung | Doku |
+|---|---|---|
+| Spulen-Freilaufdioden | **extern**, direkt an den Spulen (Kathode +24 V, Anode Drain) | 9.4 |
+| 24-V-Versorgung | **separate Platine**; auf der Steuerplatine kein 24-V-Netz. SP1/SP2 führen an beiden Polen den Drain | 9.4 |
+| 2N7002-Gate-Pulldown | 10 kΩ Gate (`T33`) → GND, hinter dem 100-Ω-Serien-R | 6.1 |
+| USB-VBUS-Entkopplung | `D4` (SS24) in Reihe: VBUS → `F1` → `D4` → +5 V | 3.2 |
+| SPI3-`CS`-Pull-ups | `R57` 10 kΩ → 3,3 V an GPIO15, `R58` 10 kΩ → 3,3 V am 541-Eingang GPIO18 | 5, 11 |
+| GPIO3-Pulldown | 10 kΩ an `HC595_SER_PIN` → GND (Strapping + `SER`-Eingang definiert) | 4, 5 |
+| Displaystecker **J2** | Belegung korrigiert: Signale in die jeweils andere Pin-Reihe; die früheren GND-Pins sind `nc` | 8.1 |
+
+Elektrisch neu bestückt sind damit genau **fünf** Bauteile: `R55`, `R56`, `R57`, `R58`
+(je 10 kΩ) und `D4` (SS24) – der Stücklisten-Vergleich v07 → v1.0 zeigt sonst keine
+Mengenänderung.
+
+**Umnummerierte Referenz-Designatoren** (v07 → v1.0), wichtig beim Vergleich alter Notizen:
+
+| Baustein | v07 | v1.0 |
+|---|---|---|
+| 74HC595 (Kaskade) | IC1, IC2, IC4, IC5 | **IC1–IC4** |
+| ESP32-S3-WROOM-1 | IC6 | **IC5** |
+| AMS1117-3.3 | IC7 | **IC6** |
+| 74HCT541 | IC14 | **IC7** |
+| MAX7221 | X5 | **X4** |
+| MAX98357A | M2 | **M1** |
+| MCP23S17 / CH340C / 2N7002 | X1 / X3 / T33 | unverändert |
+
+### v07 (2026-07-17) – Prototyp, abgelöst
+
+Erste bestückte Platine. Review und gefundene Fehler: `Review_v07.md`.
+Schaltplan/Layout: `datasheets/Kegelautomat_v07_SCH.PDF`, `_PCB.PDF`,
+Stückliste `datasheets/iBOM_Kegelautomat_v07.html`.
+
+---
+
 ## Anhang: Verwendete Quellen
 
 - `datasheets/MCP23S17_MIC.pdf` – DC-Kennwerte (V_IH = 0,8·VDD; Betrieb 1,8–5,5 V; max. 25 mA/Pin); Pin-Beschreibung + Abschnitt 1.6.6: Adresspins extern beschalten unabhängig von HAEN, HAEN = 0 → Adresse `000`; MIRROR-Bit verodert INTA/INTB intern; ODR-Default = Push-Pull
 - `datasheets/max7219-max7221.pdf` – Electrical Characteristics (V_IH = 3,5 V @ V+ = 5 V; common cathode; 8 Digits). **MAX7221** hier gewählt: echtes SPI-CS + slew-rate-limitierte Segmenttreiber (EMV), sonst registerkompatibel zum MAX7219.
-- `datasheets/Display.jpg` – Original-Display-Verdrahtung: gemultiplexte 8×8-Matrix (8 SEG + 8 DIG), 34-poliger Stecker, 3 Platinen (2×2 + 1×4)
+- `datasheets/Kegelautomat_v10_SCH.PDF`, `_PCB.PDF`, `iBOM_Kegelautomat_v10.html` – **maßgeblicher Schaltplan/Layout/Stückliste (Revision v1.0)**; Quelle für Portbelegung, J2-Displaystecker (Abschnitt 8.1) und alle Bauteil-Designatoren
+- `datasheets/Kegelautomat_Steckerbelegung.xlsx` – Lampen-/Kontakt-/Digit-Zuordnung (Blätter „Stecker" und „Spielfeld")
 - `datasheets/esp32-S3-pinout.pdf` – Pinout ESP32-S3-WROOM-1
 - **MAX98357A** (Maxim/Analog Devices) – I²S-Class-D-Amp; Gain/Kanal per Widerstand (Herstellerdatenblatt, nicht mitgeliefert)
 - `datasheets/PCB_Skizze.jpg`, `datasheets/Kegelautomat.jpg` – Layout-Skizze & Automat

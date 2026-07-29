@@ -29,8 +29,13 @@ Zwei getrennte SPI-Busse (**SPI2 = SD-Karte**, **SPI3 = Display + Kontakte**) pl
 **[`Steuerplatine_Doku.md`](Steuerplatine_Doku.md)**.
 
 ## Status
-**Layout der Prototyp-Platine fertig**; die Portbelegung ist damit festgezurrt – siehe
-[`gpiodefs.h`](gpiodefs.h) und Abschnitt 5 der Doku.
+**Schaltplan und Layout in Revision v1.0 fertig.** Alle Punkte aus dem Review des
+v07-Prototyps sind abgearbeitet – Freilaufdioden und 24-V-Versorgung (extern),
+2N7002-Gate-Pulldown, USB-VBUS-Entkopplung, Pull-ups an den SPI3-Chip-Selects – dazu die
+korrigierte Belegung des Displaysteckers. Verifikation: [`Review_v10.md`](Review_v10.md).
+
+Die Portbelegung ist damit festgezurrt – siehe [`gpiodefs.h`](gpiodefs.h) und Abschnitt 5
+der Doku.
 
 Die **Firmware** (C, ESP-IDF 5.5.1) liegt im eigenen Repository
 [bontango/kegelautomat-firmware](https://github.com/bontango/kegelautomat-firmware)
@@ -46,7 +51,9 @@ Port-/Steckerbelegung sind im Firmware-Repo nachzuziehen (dort `main/gpiodefs.h`
 ## Repository-Inhalt
 - [`Steuerplatine_Doku.md`](Steuerplatine_Doku.md) – vollständige technische Doku
 - [`gpiodefs.h`](gpiodefs.h) – zentrale GPIO-Zuweisungen der Platine (I²S, SD, Bedienung)
-- [`datasheets/`](datasheets/) – eigene PCB-Skizze und Foto des Automaten
+- [`Review_v10.md`](Review_v10.md) – Verifikation der aktuellen Revision v1.0
+- [`Review_v07.md`](Review_v07.md) – Review des Prototyps v07 (historisch)
+- [`datasheets/`](datasheets/) – Schaltplan/Layout als PDF, eigene PCB-Skizze, Foto des Automaten
 
 > Die Hersteller-Datenblätter (Microchip MCP23S17, Maxim MAX7219/7221) und das ESP32-Pinout
 > werden in der Doku als Quellen genannt, aus Urheberrechtsgründen aber nicht mitgeliefert –

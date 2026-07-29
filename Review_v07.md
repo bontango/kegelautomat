@@ -1,5 +1,9 @@
 # Review Prototyp‑Platine v07
 
+> **Historisch – abgelöst durch [`Review_v10.md`](Review_v10.md).** Die Punkte 1–8 sind in
+> Revision v1.0 erledigt. Dieses Dokument bleibt unverändert als Nachweis, was am
+> Prototyp v07 gefunden wurde.
+
 **Geprüft am:** 2026-07-17
 **Ergänzt am:** 2026-07-28 – Punkt **8** aus der Inbetriebnahme der bestückten Platine
 (SPI3-`CS` ohne definierten Boot-Zustand); Punkte 5–7 sind in der Doku erledigt.

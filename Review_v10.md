@@ -19,9 +19,11 @@ durch externe Baugruppen, der Rest in der Doku. Zusätzlich ist der bislang nur 
 GPIO3-Pulldown bestückt und die Belegung des Displaysteckers J2 korrigiert.
 **Keine GPIO-Änderung** → die Firmware ist nicht betroffen.
 
-Neu zu beachten: Am Displaystecker gibt es **keine Masse-Rückleiter mehr** (alle Gegenpins
-`nc`). Das ist so gewollt, macht das Band aber empfindlicher gegen Übersprechen – siehe
-„Offene Punkte".
+Neu zu beachten: Am Displaystecker sind alle Gegenpins **`nc`**. Das ist so gewollt – die
+Displayplatinen haben gar keinen GND-Anschluss, die früher dokumentierte
+„Masse-Verschachtelung" gab es in der Original-Verdrahtung nie. Elektrisch ist das
+unkritisch; die Abwägung, ob man die 18 freien Adern platinenseitig einseitig erden sollte,
+steht in `Steuerplatine_Doku.md` **8.4.1**.
 
 ---
 
@@ -148,18 +150,26 @@ Alles Übrige ist mengengleich; die restlichen Unterschiede sind reine Umbenennu
 
 ## 🟡 Offene Punkte
 
-1. **Keine Masse-Rückleiter mehr im Display-Band.** Bewusste Entscheidung (die
-   Verschachtelung war eine Annahme der alten Doku, keine Eigenschaft der
-   Original-Verdrahtung). Konsequenz: Die Signaladern koppeln direkt aufeinander, die
-   Ghosting-Neigung über die ~1 m ist höher. Gegenmaßnahmen bleiben moderates RSET (12 kΩ) und
-   SPI-Takt ~1 MHz; Rückfallebene ist Variante A (MAX7221 ins Display-Gehäuse). Im Betrieb
-   beobachten.
-2. **5-V-Strombudget und Ampacity** – unverändert offen aus v07: je Lampen-Header nur **ein**
+1. **Display-Band im Betrieb beobachten.** Die 18 freien Adern sind `nc`, weil die
+   Displayplatinen keinen GND-Anschluss haben – bewusste Entscheidung, keine Lücke.
+   Das eigentliche Restrisiko der 1-m-Strecke ist **nicht** kapazitives Ghosting (das ist
+   rechnerisch vier Größenordnungen zu klein, um sichtbar zu werden – 330 pC Umladung gegen
+   6,24 µC Segmentladung je Digit-Periode), sondern die **Schleifenfläche** der Matrix:
+   SEG-Block und DIG-Block liegen bis zu ~4,2 cm auseinander, über 1 m ergibt das ~0,04 m²
+   bzw. ~2,4 µH. Das äußert sich als **Abstrahlung** im Anzeigetakt, nicht als Anzeigefehler.
+   Rückfallebene bleibt Variante A (MAX7221 ins Display-Gehäuse). Herleitung in
+   `Steuerplatine_Doku.md` **8.4.1** und **8.4** Punkt 3.
+2. **Optional bei einer künftigen Revision:** die 18 freien J2-Adern platinenseitig auf GND
+   legen. Wirkt als **elektrostatischer Schirm** (funktioniert einseitig) gegen Einstreuung
+   aus dem Gehäuse – dort schalten 30 Lampen bis 3 A und zwei 24-V-Spulen. Kostet nichts,
+   hat keinen messbaren Nachteil, behebt die Schleife aus Punkt 1 aber **nicht**. Kein Grund
+   für einen Respin allein deswegen und keine Handverdrahtung auf der bestückten v1.0.
+3. **5-V-Strombudget und Ampacity** – unverändert offen aus v07: je Lampen-Header nur **ein**
    +5-V-Pin (J7 versorgt ~10 Lampen), und J1-Pin4 trägt den gesamten Board-Strom über einen
    einzelnen 2,54-mm-Pin. Gegen den realen Lampenstrom prüfen.
-3. **IRL540 real prüfen** – Spulenstrom messen und gegen die Transfer-Kennlinie bei
+4. **IRL540 real prüfen** – Spulenstrom messen und gegen die Transfer-Kennlinie bei
    V_GS = 5 V gegenchecken.
-4. **SW10–SW13 → GPA2–GPA5:** Die Reihenfolge innerhalb GPA2–GPA5 ist weiterhin nicht
+5. **SW10–SW13 → GPA2–GPA5:** Die Reihenfolge innerhalb GPA2–GPA5 ist weiterhin nicht
    dokumentiert (die Steckerbelegung nennt für J4 keine Port-Zuordnung). Beim Test ermitteln
    und **zuerst hier** eintragen, dann im Firmware-Repo (`main/hwmap.h`).
 
@@ -179,4 +189,5 @@ Alles Übrige ist mengengleich; die restlichen Unterschiede sind reine Umbenennu
 | 8 | SPI3-`CS`-Pull-ups | ✅ R57/R58 je 10 kΩ → 3,3 V |
 | — | GPIO3-Pulldown | ✅ bestückt (war nur Empfehlung) |
 | — | J2-Belegung | ✅ korrigiert, Doku 8.1 neu |
-| — | Ghosting, 5-V-Ampacity, IRL540, SW10–13 | 🟡 offen, siehe oben |
+| — | Display-Band (Abstrahlung), 5-V-Ampacity, IRL540, SW10–13 | 🟡 offen, siehe oben |
+| — | J2-Adern einseitig erden | 💡 optional bei künftiger Revision, siehe oben |

@@ -282,8 +282,11 @@ Die 8 Ziffern sind **fest als gemultiplexte 8×8-Matrix** verdrahtet – nicht s
 > **Maßgeblich ist `datasheets/Kegelautomat_v10_SCH.PDF`.** Die Belegung wurde in Revision
 > **v1.0 korrigiert**: Gegenüber v07 sind alle Signale in die jeweils **andere Pin-Reihe
 > derselben Spalte** gewandert (Digits von den geraden auf die ungeraden Pins, Segmente
-> umgekehrt). Die früher als GND angenommenen Gegenpins sind **`nc`** – eine
-> Masse-Verschachtelung gibt es in der Original-Verdrahtung nicht.
+> umgekehrt). Die früher als GND angenommenen Gegenpins sind **`nc`** – bei der Kontrolle
+> der Displayplatinen zeigte sich, dass dort **überhaupt kein GND angeschlossen** ist. Die
+> „Masse-Verschachtelung", die frühere Fassungen dieser Doku forderten, gibt es in der
+> Original-Verdrahtung also nicht; siehe 8.4 Punkt 6 zur Frage, ob man sie einseitig
+> nachrüsten sollte.
 
 | J2-Pin | Netz | Ziffer / Segment |
 |:------:|------|------------------|
@@ -312,7 +315,7 @@ Die 8 Ziffern sind **fest als gemultiplexte 8×8-Matrix** verdrahtet – nicht s
 
 ### 8.2 Warum MAX7221 statt MAX7219 (Variante B)
 
-Der Treiber bleibt auf der **Hauptplatine**, die 16 Matrixleitungen laufen über die ~1 m des Bands. Weil das Multiplexen über diese Länge das kritische Thema ist (Ghosting/EMV), wird bewusst der **MAX7221** statt des sonst gleichwertigen MAX7219 eingesetzt:
+Der Treiber bleibt auf der **Hauptplatine**, die 16 Matrixleitungen laufen über die ~1 m des Bands. Weil das Multiplexen über diese Länge das kritische Thema ist (**EMV** – siehe die Schleifenbetrachtung in 8.4.1), wird bewusst der **MAX7221** statt des sonst gleichwertigen MAX7219 eingesetzt:
 
 - **Slew-rate-begrenzte Segmenttreiber** → deutlich sanftere Flanken auf den 8 langen Segmentleitungen → weniger Ringing und EMV. (Der MAX7219 treibt die Segmente ungebremst.)
 - **Echtes SPI-Chip-Select:** Der MAX7221 schiebt Daten **nur bei aktivem (LOW) CS**. Damit taktet ein Kontakt-Poll des MCP23S17 den MAX **nicht** mit (kein Frame-Versatz durch Störflanken, keine dauernd sendende 1-m-„Antenne" – beim MAX7219 wäre das ein Restproblem).
@@ -330,10 +333,55 @@ Der Treiber bleibt auf der **Hauptplatine**, die 16 Matrixleitungen laufen über
 1. **Serien-R an `CLK`, `DIN`, `CS` – EMV-Vorsorge, nicht kabelbedingt:** 68–100 Ω direkt am **74HCT541-Ausgang** (Widerstand am Treiber-Pin, nicht am MAX), **auf allen drei Leitungen gleicher Wert**, damit kein Versatz zwischen Takt und Daten entsteht.
    > **Einordnung:** Diese drei Leitungen laufen in Variante B **nicht** über das Band – 541 und MAX7221 sitzen wenige Zentimeter voneinander auf der Hauptplatine. Bei ~5–8 ns Flankenzeit des 74HCT541 und ~6 ns/m auf FR4-Microstrip liegt die Grenze „elektrisch kurz" (l < t_r / 6·t_pd) bei **≈ 17 cm** – die Strecke ist also um eine Größenordnung unkritisch, Reflexionen sind hier kein Thema (Reflexionen hängen an der Flankensteilheit, nicht am Takt). Die Widerstände bleiben trotzdem bestückt: Sie kosten nichts, dämpfen Flanken und Abstrahlung, und das Timing bleibt entspannt (100 Ω gegen ~30 pF ≈ 3 ns; die MAX-Eingänge haben 1 V Hysterese). **Zwingend** werden sie erst bei **Variante A**, wo `DIN/CLK/CS` über die 1 m gehen (siehe Kasten am Ende von Abschnitt 8).
 2. **SPI-Takt für den MAX auf ~1 MHz** (in ESP-IDF pro Device über `clock_speed_hz` im `spi_device_interface_config_t`). Für 8 Digits reicht das dicke; langsamere Flanken über 1 m sind ein Geschenk. Der MCP23S17 darf am selben SPI3-Bus weiter mit 8–10 MHz laufen – der Treiber schaltet die Rate pro Transaktion um.
-3. **RSET eher moderat** wählen: kleinerer Segment-Spitzenstrom = weniger Umladung auf den langen Adern = weniger Ghosting. (Ghosting-Mechanismus: Das Band hat ~50 pF/m zwischen den Adern, also ~50 pF je Ader auf 1 m. Beim Digit-Wechsel lädt sich diese Kapazität um und lässt die Nachbarziffer schwach nachleuchten – der Klassiker bei abgesetzten Multiplex-Displays.)
-   > **Wichtig seit v1.0:** Da im Band **keine** Masse-Rückleiter zwischen den Signaladern liegen (alle Gegenpins von J2 sind `nc`, siehe 8.1), koppeln benachbarte Adern direkt aufeinander. Das Übersprechen – und damit die Ghosting-Neigung – ist höher als bei einem verschachtelten Band. Das macht diesen Punkt (moderates RSET) und den langsamen SPI-Takt wichtiger, nicht optional.
+3. **RSET moderat** wählen (12 kΩ, siehe 8.5) – primär wegen der Bauteilgrenzwerte des Digits, **nicht** wegen Ghosting.
+   > **Kapazitives Ghosting ist hier quantitativ kein Thema.** Frühere Fassungen dieser Doku
+   > haben es als Hauptrisiko der 1-m-Strecke geführt; die Rechnung trägt das nicht:
+   > Eine DIG-Ader hat auf 1 m rund **50 pF** (ungeschirmt) bis **110 pF** (falls die
+   > Nachbaradern auf GND lägen). Beim Digit-Wechsel muss diese Kapazität um ~3 V umgeladen
+   > werden → **Q = C·ΔV ≈ 330 pC**. Ein Segment liefert dagegen in einer Digit-Periode
+   > (156 µs bei ~800 Hz Framerate) **40 mA × 156 µs = 6,24 µC**. Das sind **vier
+   > Größenordnungen** Unterschied – der Ghost läge bei ~0,005 % Helligkeit und ist
+   > unsichtbar. Das gilt in beide Richtungen: Zusätzliche Kabelkapazität schadet ebenso
+   > wenig (Slew einer SEG-Leitung: 100 pF × 2 V / 40 mA ≈ 5 ns).
 4. **Abblockung direkt am MAX7221:** 10 µF Elko **+** 100 nF Keramik an V+/GND (die Digit-Treiber ziehen im Multiplex kräftige Spitzen – das ist die eigentliche Störquelle). **Beide GND-Pins (4 und 9) anschließen** (wird gern übersehen), durchgehende Massefläche unter den Signalleitungen.
 5. **Original-„Widerstände"-Platine entfernen/überbrücken:** Der MAX7221 ist eine **Konstantstromquelle** (Strom kommt aus RSET). Serienwiderstände in den SEG-/DIG-Leitungen fressen nur die ohnehin knappe Spannungsreserve bei V+ = 5 V – dort **keine** Widerstände.
+6. **Freie Adern des Bands: optional einseitig auf GND** – lohnend, aber kein Grund für einen Respin. Siehe 8.4.1.
+
+#### 8.4.1 Die 18 freien Adern – einseitig erden oder nicht?
+
+Die Displayplatinen haben **keinen GND-Anschluss** (an der Hardware geprüft), die 18
+übrigen Adern des Bands enden dort also offen. Sie ließen sich platinenseitig auf GND
+legen. Was das bringt und was nicht:
+
+**Was es *nicht* ist – und warum die alte Begründung fiel:** Frühere Fassungen sprachen von
+Masse-**Rückleitern**. Das war falsch gedacht. Der Rückstrom eines Segments fließt vom
+SEG-Pin über die LED und die **DIG-Leitung** zurück zum MAX7221 – nie über GND. Eine
+einseitig aufgelegte Ader führt per Definition **keinen Strom** und kann deshalb prinzipiell
+kein Rückleiter sein. An der Stromschleife ändert einseitiges GND exakt **nichts**.
+
+**Was es bringt – elektrostatische Schirmung.** Die funktioniert bei **einseitigem**
+Anschluss vollständig (E-Feld-Schirme brauchen genau eine Masseverbindung; nur
+Magnetfeldschirme brauchen Stromfluss). Die Geometrie ist bereits richtig: Im Flachband
+liegt Ader *n* physisch neben *n ± 1*, und die v1.0-Belegung trennt **jede** Signalader
+durch eine freie Ader (DIG auf 1, 3 … 15, SEG auf 20, 22 … 34). Auf GND gelegt werden diese
+Adern vom Koppelpfad zum Schirm. Relevant ist das weniger für das Display selbst als für die
+**Umgebung**: Im selben Gehäuse schalten 30 Lampen mit bis zu 3 A und zwei 24-V-Spulen –
+gegen deren kapazitive Einstreuung wirkt der Schirm. Nebenbei bekommen 18 sonst floatende,
+1 m lange Drähte ein definiertes Potenzial, statt als kleine Antennen ein- und wieder
+auszukoppeln.
+
+**Was es nicht behebt – die Stromschleife.** SEG-Block (Adern 20–34) und DIG-Block (1–15)
+liegen bis zu 33 Rastermaße = bei 1,27 mm Raster **~4,2 cm** auseinander. Die Schleife
+SEG → LED → DIG umfasst damit rund 1 m × 4,2 cm ≈ **0,04 m²**, das entspricht grob
+**~2,4 µH**. Dagegen hilft nur, SEG- und DIG-Adern paarweise zu verschachteln – das gibt die
+Original-Steckerbelegung nicht her – oder **Variante A**. Einseitiges GND ändert daran nichts.
+
+> **Empfehlung:** Bei einer künftigen Revision mitnehmen (18 Pads an die GND-Fläche kosten
+> nichts, ein messbarer Nachteil existiert nicht – siehe die Kapazitätsrechnung in Punkt 3).
+> **Kein Grund für einen Respin allein deswegen**, und erst recht keine Handverdrahtung von
+> 18 Pins auf der bestückten v1.0. Unkritisch ist es auch beim Stecken: Selbst ein um eine
+> Position verschobener Stecker legt nur Konstantstromquellen (SEG) bzw. Stromsenken (DIG)
+> auf GND – und der Wannenstecker ist ohnehin codiert.
 
 ### 8.5 Konfiguration (identisch zum MAX7219)
 
@@ -353,9 +401,9 @@ Der Treiber bleibt auf der **Hauptplatine**, die 16 Matrixleitungen laufen über
 - **5-V-Strombudget Display:** eine „8." = 8 Segmente × 40 mA = **~320 mA** je aktivem Digit. Da immer nur ein Digit leuchtet (Multiplex), ist das zugleich rund der Mittelwert im Worst Case (alle Digits „8."). Für das 5-V-Netzteil ~350 mA für die Anzeige einplanen (zusätzlich zu Lampen/Audio).
 - Datenblatt: Kingbright SC08-11EWA, Spec DSAP8389 Rev V.1A (2020).
 
-> **Restrisiko & Rückfallebene:** Multiplex über ~1 m kann trotz aller Maßnahmen ein Rest-Ghosting zeigen. Das Datenblatt (S. 10) empfiehlt ausdrücklich das Gegenteil von Variante B: *„The MAX7219/MAX7221 should be placed in close proximity to the LED display, and connections should be kept as short as possible to minimize the effects of wiring inductance and electro-magnetic interference."* Falls sich Ghosting im Betrieb zeigt, ist die saubere Lösung (**Variante A**) den MAX7221 auf eine kleine Platine **ins Display-Gehäuse** zu setzen – dann laufen nur noch `DIN/CLK/CS/5 V/GND` über die 1 m, die 16 Matrixleitungen bleiben kurz und die 320-mA-Digit-Pulse bleiben beim Display. Die Firmware bliebe unverändert.
+> **Restrisiko & Rückfallebene:** Das Datenblatt (S. 10) empfiehlt ausdrücklich das Gegenteil von Variante B: *„The MAX7219/MAX7221 should be placed in close proximity to the LED display, and connections should be kept as short as possible to minimize the effects of **wiring inductance** and electro-magnetic interference."* Das eigentliche Restrisiko ist damit die **Leitungsinduktivität der Matrixschleife** (~0,04 m² Schleifenfläche, ~2,4 µH – siehe 8.4.1), nicht das oft zitierte kapazitive Ghosting: Das ist bei diesen Strömen rechnerisch vier Größenordnungen zu klein, um sichtbar zu werden (8.4 Punkt 3). Die Induktivität wirkt sich vor allem als **Abstrahlung** aus – die 320-mA-Digit-Pulse laufen über eine 1 m lange, weit aufgespannte Schleife –, für die Anzeigefunktion selbst ist sie unkritisch (L/R ≈ 50 ns gegen 156 µs Digit-Periode). Zeigt sich im Betrieb dennoch ein Problem (Rest-Ghosting, oder Störungen anderer Baugruppen im Takt der Anzeige), ist die saubere Lösung (**Variante A**) den MAX7221 auf eine kleine Platine **ins Display-Gehäuse** zu setzen – dann laufen nur noch `DIN/CLK/CS/5 V/GND` über die 1 m, die 16 Matrixleitungen bleiben kurz und die 320-mA-Digit-Pulse bleiben beim Display. Die Firmware bliebe unverändert.
 >
-> **Was bei Variante A mitwandert:** `RSET` und vor allem die Abblockung (10 µF + 100 nF, laut Datenblatt „as close to the device as possible") gehören dann auf die Display-Platine, ebenso beide GND-Pins. Und **erst dann** sind die Serien-R (68–100 Ω) in `CLK/DIN/CS` elektrisch wirklich nötig: Über 1 m ist die Leitung elektrisch lang, unterminiert gibt es Ringing. Der Wellenwiderstand eines Flachbands liegt je nach Masseführung grob bei ~100–150 Ω (ohne definierten Rückleiter – wie hier, siehe 8.1 – eher am oberen Ende und schlechter definiert), der 74HCT541 bei ~40 Ω Ausgangsimpedanz → 68–100 Ω sind eine brauchbare Dämpfung. Bei Variante A böte es sich zusätzlich an, für `CLK/DIN/CS` je eine benachbarte Ader des Bands als Masse-Rückleiter zu belegen – bei nur 5 Signalen ist im 34-poligen Band reichlich Platz.
+> **Was bei Variante A mitwandert:** `RSET` und vor allem die Abblockung (10 µF + 100 nF, laut Datenblatt „as close to the device as possible") gehören dann auf die Display-Platine, ebenso beide GND-Pins. Und **erst dann** sind die Serien-R (68–100 Ω) in `CLK/DIN/CS` elektrisch wirklich nötig: Über 1 m ist die Leitung elektrisch lang, unterminiert gibt es Ringing. Der Wellenwiderstand eines Flachbands liegt je nach Masseführung grob bei ~100–150 Ω (ohne definierten Rückleiter – wie hier, siehe 8.1 – eher am oberen Ende und schlechter definiert), der 74HCT541 bei ~40 Ω Ausgangsimpedanz → 68–100 Ω sind eine brauchbare Dämpfung. **Bei Variante A entfällt das Problem aus 8.4.1 von selbst:** Über das Band gehen dann nur noch 5 Signale, und dort ist GND ein *echter* Rückleiter (die Display-Platine bekommt ja 5 V/GND). Man kann `CLK/DIN/CS` dann beidseitig zwischen Masseadern legen – im 34-poligen Band ist reichlich Platz –, und das wirkt dann auch gegen die magnetische Kopplung, nicht nur elektrostatisch.
 
 ---
 
@@ -503,17 +551,18 @@ Definierte, ungefährliche Zustände von Power-on bis Firmware-Init:
 1. **5-V-Netzteil dimensionieren** – bestimmt durch den Summenstrom der 30 Lampen (Lampenstrom messen) plus MAX98357A-Spitzen. Reserve einplanen. Dazu die **Ampacity** prüfen: je Lampen-Header nur **ein** +5-V-Pin (J7 versorgt ~10 Lampen), und J1-Pin4 trägt den gesamten Board-Strom über einen einzelnen 2,54-mm-Pin.
 2. **IRL540 real prüfen:** Spulenstrom messen und gegen die Transfer-Kennlinie bei V_GS = 5 V gegenchecken. Bei hohen Strömen ggf. auf einen MOSFET mit niedrigerem R_DS(on) bei 5 V wechseln.
 3. **Kontakte physisch:** Pin-Zuordnung liegt in `datasheets/Kegelautomat_Steckerbelegung.xlsx` (Blatt „Stecker") und ist in Abschnitt 9.2 übernommen. Offen bleibt nur die Reihenfolge von SW10–SW13 innerhalb GPA2–GPA5 (siehe 9.2).
-4. **Ghosting am Display beobachten:** Im 34-poligen Band liegen ab v1.0 **keine** Masse-Rückleiter zwischen den Signaladern (siehe 8.1). Falls Rest-Ghosting auftritt → Variante A (MAX7221 ins Display-Gehäuse), siehe Kasten am Ende von Abschnitt 8.
+4. **Display-Band im Betrieb beobachten:** Die Matrixschleife über die ~1 m spannt ~0,04 m² auf (~2,4 µH, siehe 8.4.1). Zu erwarten ist keine Anzeigestörung, sondern allenfalls **Abstrahlung** im Takt der Anzeige – also eher Störungen *anderer* Baugruppen als des Displays. Rückfallebene bleibt Variante A (Kasten am Ende von Abschnitt 8). Kapazitives Ghosting ist rechnerisch ausgeschlossen (8.4 Punkt 3).
+5. **Optional bei einer künftigen Revision:** die 18 freien Adern von J2 platinenseitig auf GND legen – elektrostatischer Schirm, kostet nichts, behebt die Schleife aber nicht. Abwägung in **8.4.1**.
 
 **Dauerhaft zu beachten (kein offener Punkt, sondern Betriebsregel):**
 
-5. **Entkopplung:** je IC 100 nF nahe an VCC/VDD; zusätzlich Elkos am 5-V-Rail. Getrennte GND-Führung (Leistungs-GND der Lampen/Spulen **und** Audio-GND sternförmig zum Logik-GND). Zur Entkopplung von USB-VBUS gegen das externe 5-V-Netzteil (D4/SS24) siehe **Abschnitt 3.3**.
-6. **Reserve:** am ESP **4** (GPIO 39–42, JTAG-Pins – als GPIO nutzbar; zusätzlich IO19/20, siehe Abschnitt 5), am MCP23S17 **2** Eingänge frei (GPA6/7, `nc`).
-7. **DIP-Multiplexing:** DIP1-3 liegen auf den I²S-Leitungen (47/21/14), gelesen über GPIO13. Die DIPs nur einlesen, wenn I²S ruht (beim Start). Die Entkopplung übernehmen **drei Dioden** am DIP-Schalter (siehe 13.3) – kein Tri-State-Puffer; der frühere Punkt „DIP-Puffer an 3,3 V betreiben" ist damit gegenstandslos, die Lösung ist inhärent 3,3-V-sicher.
-8. **595-`/OE` invertiert:** Firmware beachten – GPIO16 = HIGH schaltet Lampen ein (2N7002, siehe 6.1).
-9. **Audio:** MAX98357A-Modul – nur verifizieren, dass `SD_MODE` nicht auf 0 V (Shutdown) hängt und die Kanalwahl (L+R)/2 stimmt; Details in Abschnitt 13.1.
-10. **Display-Kabel (Variante B):** Serien-R (68–100 Ω) an CLK/DIN/CS, SPI-Takt des MAX auf ~1 MHz, Abblockung + beide GND-Pins am MAX7221, RSET moderat, Original-„Widerstände"-Platine entfernen (Konstantstromquelle). Siehe Abschnitt 8.
-11. **Common cathode:** Für den gewählten **SC08-11EWA lt. Datenblatt bestätigt** (Common Cathode, rechter DP) – passt zum MAX7221 (common-cathode-only). Bei abweichenden Digit-Typen vorher gegenprüfen. RSET = **12 kΩ** (nicht 10 kΩ) für ~40 mA bei V_F ≈ 2 V (siehe Abschnitt 8.5/8.6).
+6. **Entkopplung:** je IC 100 nF nahe an VCC/VDD; zusätzlich Elkos am 5-V-Rail. Getrennte GND-Führung (Leistungs-GND der Lampen/Spulen **und** Audio-GND sternförmig zum Logik-GND). Zur Entkopplung von USB-VBUS gegen das externe 5-V-Netzteil (D4/SS24) siehe **Abschnitt 3.3**.
+7. **Reserve:** am ESP **4** (GPIO 39–42, JTAG-Pins – als GPIO nutzbar; zusätzlich IO19/20, siehe Abschnitt 5), am MCP23S17 **2** Eingänge frei (GPA6/7, `nc`).
+8. **DIP-Multiplexing:** DIP1-3 liegen auf den I²S-Leitungen (47/21/14), gelesen über GPIO13. Die DIPs nur einlesen, wenn I²S ruht (beim Start). Die Entkopplung übernehmen **drei Dioden** am DIP-Schalter (siehe 13.3) – kein Tri-State-Puffer; der frühere Punkt „DIP-Puffer an 3,3 V betreiben" ist damit gegenstandslos, die Lösung ist inhärent 3,3-V-sicher.
+9. **595-`/OE` invertiert:** Firmware beachten – GPIO16 = HIGH schaltet Lampen ein (2N7002, siehe 6.1).
+10. **Audio:** MAX98357A-Modul – nur verifizieren, dass `SD_MODE` nicht auf 0 V (Shutdown) hängt und die Kanalwahl (L+R)/2 stimmt; Details in Abschnitt 13.1.
+11. **Display-Kabel (Variante B):** Serien-R (68–100 Ω) an CLK/DIN/CS, SPI-Takt des MAX auf ~1 MHz, Abblockung + beide GND-Pins am MAX7221, RSET moderat, Original-„Widerstände"-Platine entfernen (Konstantstromquelle). Siehe Abschnitt 8.
+12. **Common cathode:** Für den gewählten **SC08-11EWA lt. Datenblatt bestätigt** (Common Cathode, rechter DP) – passt zum MAX7221 (common-cathode-only). Bei abweichenden Digit-Typen vorher gegenprüfen. RSET = **12 kΩ** (nicht 10 kΩ) für ~40 mA bei V_F ≈ 2 V (siehe Abschnitt 8.5/8.6).
 
 **In Revision v1.0 erledigt** (Details in Abschnitt 14 und `Review_v10.md`): Freilaufdioden an den Spulen · 24-V-Versorgung · 2N7002-Gate-Pulldown · USB-VBUS-Entkopplung · SPI3-`CS`-Pull-ups · GPIO3-Pulldown · Belegung des Displaysteckers J2.
 

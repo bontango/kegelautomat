@@ -13,7 +13,8 @@ den originalen Spielablauf nach. Aktuelle **Platinenrevision: v1.0**.
 - 2× Spulen / Münz-Weiche (24 V, low-side) – **stromlos fallen die Münzen durch** (sicherer Grundzustand)
 - 8× 7-Segment-Displays (common cathode) — **fest gemultiplexte 8×8-Matrix** (8 SEG + 8 DIG),
   3 Platinen (2×2 + 1×4) an **einem ~1 m langen 34-pol. Flachband**; Belegung des Steckers J2
-  siehe Doku §8.1 (in v1.0 korrigiert, **keine** Masse-Rückleiter im Band)
+  siehe Doku §8.1 (in v1.0 korrigiert). Die Displayplatinen haben **kein GND** – die 18
+  freien Adern sind `nc`; Abwägung zum einseitigen Erden in Doku §8.4.1
 - **Sound (Zusatz, kein Originalteil):** Audio-Files von SD → MAX98357A (I²S) → Lautsprecher
 
 ## Hardware-Architektur (Kernentscheidungen — verifiziert)
@@ -98,8 +99,8 @@ SW10–SW13 auf GPA2–GPA5) **zuerst hierher**.
 - **Firmware:** Gerüst + Selbsttest stehen (siehe oben). Als Nächstes weitere Testmodi
   und dann der Spielablauf.
 - Offene HW-Punkte: 5-V-Strombudget/Ampacity (30 Lampen), IRL540-Strom real prüfen,
-  Reihenfolge SW10–SW13 auf GPA2–GPA5, Ghosting am Display beobachten (kein Masse-Rückleiter
-  im 34-pol. Band).
+  Reihenfolge SW10–SW13 auf GPA2–GPA5, Display-Band beobachten (Schleifenfläche der Matrix
+  ~0,04 m² → Abstrahlung, nicht Ghosting; Doku §8.4.1).
 
 ## Konventionen
 - Doku-Sprache: **Deutsch**.

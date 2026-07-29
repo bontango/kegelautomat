@@ -1,6 +1,8 @@
 # Review Prototyp‑Platine v07
 
 **Geprüft am:** 2026-07-17
+**Ergänzt am:** 2026-07-28 – Punkt **8** aus der Inbetriebnahme der bestückten Platine
+(SPI3-`CS` ohne definierten Boot-Zustand); Punkte 5–7 sind in der Doku erledigt.
 **Grundlage:** `datasheets/Kegelautomat_v07_SCH.PDF`, `_PCB.PDF`, `iBOM_Kegelautomat_v07.html`
 **Abgeglichen gegen:** `Steuerplatine_Doku.md`, `gpiodefs.h`, `datasheets/Display.jpg`
 **BOM:** 134 Bauteile, 31 Gruppen.
@@ -15,8 +17,10 @@ aus dem Raster‑PDF (keine echte DRC/Netz‑für‑Netz‑Prüfung möglich).
 ## Kurzfazit
 
 Elektrisch weitgehend sauber und deckungsgleich mit der Doku. **Vor dem Fertigen**
-sollten die drei Punkte **1, 3, 4** angegangen werden. Punkt **5** ist kein
-Platinen‑, sondern ein Doku‑Fehler (der Schaltplan ist dort korrekt).
+sollten die Punkte **1, 3, 4** und **8** angegangen werden. Punkt **5** ist kein
+Platinen‑, sondern ein Doku‑Fehler (der Schaltplan ist dort korrekt). Punkt **8**
+stammt nicht aus der Entwurfsprüfung, sondern aus der Inbetriebnahme der bestückten
+Platine – er ist am realen Aufbau reproduzierbar aufgetreten.
 
 ---
 
@@ -86,6 +90,46 @@ gleichzeitig gesteckt, speisen beide gegeneinander (Rückspeisung in den PC‑Po
 **Fix:** Schottky in Reihe zu VBUS (VBUS→F1→Schottky→+5 V) oder Constraint klar
 dokumentieren („nie beide gleichzeitig"). Volllast (Lampen bis 3 A) ist ohnehin nur
 über J1 möglich, F1 = 1,5 A.
+
+### 8. SPI3‑`CS` (GPIO18/GPIO15): kein Pull‑up → undefiniert beim Boot
+*Nachtrag 2026-07-28, an der bestückten Platine gefunden – nicht aus der Entwurfsprüfung.*
+
+Beide Chip‑Selects hängen ohne Pull‑up am 74HCT541 (Kanal 3 = GPIO18 → MAX7221‑`CS`;
+GPIO15 geht direkt an den MCP23S17). Bis `spibus_init()` sind die ESP‑Pins hochohmig,
+der 541 macht aus dem floatenden Eingang einen beliebigen 5‑V‑Pegel. Liegt `CS` dabei
+LOW, schiebt der MAX7221 Störflanken von `CLK`/`DIN` als Frame ein und übernimmt sie
+mit der nächsten steigenden CS‑Flanke.
+
+**Symptom am realen Aufbau:** Nach dem Einschalten leuchten alle 8 Ziffern kurz hell
+als `8`, danach erscheint die reguläre `0`. Das ist die Signatur des
+**Display‑Test‑Registers** — laut Datenblatt übersteuert es *„all controls and digit
+registers (including the shutdown register)"* und bleibt aktiv, *„until the display‑test
+register is reconfigured"*; der Blitz endet daher exakt mit dem ersten Kommando der
+Firmware (`0x0F 0x00`). Der POR‑Zustand kann es nicht sein: dort ist die Anzeige
+geblankt, im Shutdown, Scan‑Limit 1 Digit und Intensity auf **Minimum** — also weder
+alle 8 Digits noch hell.
+
+Systematisch ist das dieselbe Klasse wie Punkt 3: ein floatender Eingang, für den das
+Boot‑Konzept (Doku §11) einen definierten Zustand vorsieht, der aber auf der Platine
+nicht erzwungen wird. Beim MCP23S17 wiegt es schwerer als beim Display — ein
+Zufallsframe könnte `IODIR` umstellen und Eingänge zu Ausgängen machen, die gegen die
+Kontaktschalter treiben.
+
+**Fix:** je **10 kΩ nach 3,3 V**, beide auf der **ESP‑Seite** — bei GPIO18 an den
+541‑**Eingang** (am 541‑Ausgang wirkungslos, der treibt bei `/OE` = GND aktiv), bei
+GPIO15 direkt an das Netz, das ohne Puffer zum MCP läuft. **Auf 3,3 V**, nie 5 V, weil
+der S3 nicht 5‑V‑tolerant ist. `CLK`/`DIN` brauchen nichts: liegt `CS` sicher HIGH,
+schiebt keiner der beiden Bausteine ein. Billiger Fix, gleiche Kategorie wie Punkt 3.
+
+**Firmwareseitig bereits entschärft:** `spibus_park_cs()` parkt beide CS als allererstes
+in `app_main()`, die Display‑Initialisierung läuft vor der SD‑Karte. Das schließt das
+Fenster ab `app_main()` — die Bootloader‑Zeit davor bleibt ohne die Pull‑ups offen.
+
+**Nachtest 2026‑07‑28:** Mit dieser Firmware tritt der Blitz nicht mehr sichtbar auf.
+Der Punkt bleibt trotzdem offen: Ob im Restfenster ein Frame mit gesetztem
+Display‑Test‑Bit zusammenkommt, ist Zufall, und wo ein floatender Eingang ruht, hängt
+von Leckstrom, Temperatur und Verschmutzung ab. Erst die Pull‑ups machen aus „geht
+gerade" ein „geht immer" — zwei Widerstände, gleiche Kategorie wie Punkt 3.
 
 ---
 
@@ -157,4 +201,5 @@ Bahnbreiten/Anordnung beurteilen, nicht jede einzelne Verbindung.
 | 5 | Display‑Segmentreihenfolge | Doku‑Fehler | Doku §8.1 an Schaltplan/Display.jpg |
 | 6 | MCP‑Reserve GPA6/7 | Doku‑Abgleich | Doku §9.2 aktualisieren |
 | 7 | CH340 statt nativem USB | Doku‑Abgleich | Doku §4/§5 + gpiodefs.h |
+| 8 | SPI3‑`CS` ohne Pull‑up | HW‑Fehler | 10 kΩ → 3,3 V an 541‑Eingang GPIO18 **und** an Netz GPIO15 |
 | — | GPIO3‑Pulldown, Digit‑Map, +5‑V‑Ampacity, SD_MODE, ESP‑3V3‑C | Prüfen | siehe oben |

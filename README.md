@@ -30,8 +30,18 @@ Zwei getrennte SPI-Busse (**SPI2 = SD-Karte**, **SPI3 = Display + Kontakte**) pl
 
 ## Status
 **Layout der Prototyp-Platine fertig**; die Portbelegung ist damit festgezurrt – siehe
-[`gpiodefs.h`](gpiodefs.h) und Abschnitt 5 der Doku. Die Firmware (C, ESP-IDF: I²S + FATFS/SD,
-595-/MCP-/MAX7221-Ansteuerung) folgt als zweiter Schritt.
+[`gpiodefs.h`](gpiodefs.h) und Abschnitt 5 der Doku.
+
+Die **Firmware** (C, ESP-IDF 5.5.1) liegt im eigenen Repository
+[bontango/kegelautomat-firmware](https://github.com/bontango/kegelautomat-firmware)
+(Arbeitskopie: `C:\Users\bonta\ESP32_source\kegelautomat`).
+Stand dort: **v0.01** – Programmgerüst mit Selbsttest –
+Treiber für Lampen, Displays, Kontakte, Spulen, Audio (WAV von SD) und
+Firmware-Update von SD stehen, der Spielablauf folgt.
+
+Dieses Repository bleibt die maßgebliche Quelle für die Elektrik; Änderungen an
+Port-/Steckerbelegung sind im Firmware-Repo nachzuziehen (dort `main/gpiodefs.h`,
+`main/hwmap.h`, `docs/hardware.md`).
 
 ## Repository-Inhalt
 - [`Steuerplatine_Doku.md`](Steuerplatine_Doku.md) – vollständige technische Doku

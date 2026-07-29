@@ -352,13 +352,38 @@ Direkte Verbindung nach GND genügt (keine Widerstände nötig). Wer sich einen 
 
 ### 9.2 IO-Belegung
 
-| Pin | Funktion | Richtung | Beschaltung |
-|-----|----------|:--------:|-------------|
-| GPB0–GPB7 | Kontakt 1–8 | IN | interner Pull-up, schaltet gegen GND |
-| GPA0–GPA5 | Kontakt 9–14 | IN | interner Pull-up, schaltet gegen GND |
-| GPA6, GPA7 | **Reserve** | – | frei; auf v07 `nc` (nicht auf Header geführt) |
+Maßgeblich ist `datasheets/Kegelautomat_Steckerbelegung.xlsx` (Blatt „Stecker", Stecker
+**J3** und **J4**). Alle Eingänge mit internem Pull-up, jeder Kontakt schaltet gegen GND.
 
-> **Bilanz:** 14 Kontakte + **2 Reserve** = 16 IO.
+| Port | Schalter | Stecker/Pin | Funktion |
+|------|----------|-------------|----------|
+| GPB0 | SW1  | J3-12 | Kontakt 1 |
+| GPB1 | SW2  | J3-11 | Kontakt 3 |
+| GPB2 | SW3  | J3-10 | Kontakt 5 |
+| GPB3 | SW4  | J3-9  | Kontakt 7 |
+| GPB4 | SW5  | J3-8  | Kontakt 9 |
+| GPB5 | SW6  | J3-7  | Kontakt 8 |
+| GPB6 | SW7  | J3-6  | Kontakt 6 |
+| GPB7 | SW14 | J3-5  | **Reserve** (auf den Header geführt, nutzbar) |
+| GPA1 | SW8  | J3-4  | Kontakt 4 |
+| GPA0 | SW9  | J3-3  | Kontakt 2 |
+| GPA2 | SW10 | J4-6  | Start ⚠ |
+| GPA3 | SW11 | J4-4  | Münzer NO ⚠ |
+| GPA4 | SW12 | J4-3  | Münzer NC ⚠ |
+| GPA5 | SW13 | J4-2  | SLAM-Kontakt (NO) ⚠ |
+| GPA6, GPA7 | – | – | **Reserve**, auf v07 `nc` (nicht auf Header geführt) |
+
+> **Bilanz:** **13 belegte Kontakte** (Kontakt 1–9, Start, Münzer NO/NC, SLAM)
+> + **1 Reserve auf dem Header** (SW14, GPB7) + **2 Reserve `nc`** (GPA6/7) = 16 IO.
+
+⚠ **Noch zu verifizieren:** Die Steckerbelegung nennt für J4 (SW10–SW13) *keine*
+Port-Zuordnung. Dass diese vier auf **GPA2–GPA5** liegen, ist zwingend (alle anderen
+IO sind belegt bzw. `nc`) – **offen ist nur die Reihenfolge innerhalb GPA2–GPA5.**
+Beim Bestücken gegen den Schaltplan prüfen und hier wie in der Firmware
+(`main/hwmap.h`, Tabelle `contact_map[]`) eintragen.
+
+Die Kegel-/Zahl-/Kontakt-Reihenfolge auf dem Spielfeld ist von links nach rechts
+**1, 3, 5, 7, 9, 8, 6, 4, 2** (Blatt „Spielfeld").
 
 ### 9.3 Kontakt-Erfassung per Interrupt
 
@@ -406,8 +431,40 @@ Definierte, ungefährliche Zustände von Power-on bis Firmware-Init:
 | Spulen | IRL540-Gate-Pulldowns; ESP-Ausgänge (12/11) nach Reset hochohmig | **alle aus** → Münzen fallen durch (sicherer Zustand, siehe 9.4) |
 | Display | MAX7221 startet im Shutdown (Datasheet) | **dunkel** |
 | MCP | `/RESET` fest auf 3,3 V; Register-Defaults = alle Pins Eingang | keine ungewollten Ausgänge |
+| **SPI3-`CS`** | **derzeit ungesichert** – GPIO18/GPIO15 sind bis `spibus_init()` hochohmig, der 74HCT541 macht daraus einen beliebigen 5-V-Pegel | **undefiniert**, siehe Kasten unten |
 | Sound | I²S-Pins vor Init hochohmig; MAX98357A liefert ohne Takt kein Signal | **still** |
 | Strapping | GPIO0/3/45/46 in definiertem Zustand | normaler Flash-Boot |
+
+> **Lücke im Boot-Konzept – bei der Inbetriebnahme am 2026-07-28 gefunden (Review-Punkt 8):**
+> Für Lampen, Spulen, MCP-Register und Audio gibt es je einen definierten Boot-Zustand,
+> für die beiden SPI3-Chip-Selects **nicht**. GPIO18 (MAX7221-`CS`) und GPIO15
+> (MCP23S17-`CS`) sind bis `spibus_init()` hochohmig; der 74HCT541 (Kanal 3) macht daraus
+> einen beliebigen 5-V-Pegel. Liegt `CS` dabei LOW, schiebt der MAX7221 Störflanken von
+> `CLK`/`DIN` als Frame ein und übernimmt sie mit der nächsten steigenden CS-Flanke.
+>
+> **Beobachtet:** Nach dem Einschalten leuchteten alle 8 Ziffern kurz hell als `8`, bis die
+> Firmware die Anzeige übernahm – die Signatur des **Display-Test-Registers**, das laut
+> Datenblatt *„all controls and digit registers (including the shutdown register)"*
+> übersteuert und bis zum Zurückschreiben aktiv bleibt. Der POR-Zustand scheidet als
+> Erklärung aus (dort: geblankt, Shutdown, Scan-Limit 1 Digit, Intensity **Minimum**).
+>
+> **Fix Hardware:** je **10 kΩ Pull-up nach 3,3 V**, beide auf der **ESP-Seite**:
+> - **GPIO18** (MAX7221-`CS`) läuft über den 541 (Kanal 3) – der Pull-up gehört an den
+>   541-**Eingang**. Am 541-*Ausgang* wäre er wirkungslos, weil der bei `/OE` = GND aktiv treibt.
+> - **GPIO15** (MCP23S17-`CS`) geht **nicht** über den 541, sondern direkt an den MCP
+>   (3,3 V, Abschnitt 6) – der Pull-up gehört einfach an dieses Netz.
+>
+> In beiden Fällen auf **3,3 V**, nie auf 5 V: der S3 ist nicht 5-V-tolerant.
+> `CLK`/`DIN` (GPIO17/8) floaten beim Boot ebenfalls, brauchen aber keinen Pull-up –
+> solange `CS` sicher HIGH liegt, schiebt keiner der beiden Bausteine etwas ein.
+>
+> **Fix Firmware (bereits umgesetzt):** `spibus_park_cs()` legt beide CS-Leitungen als
+> allererstes in `app_main()` auf HIGH; die Display-Initialisierung läuft vor der SD-Karte,
+> damit das Display-Test-Register früh zurückgeschrieben wird. Das schließt das Fenster ab
+> `app_main()`, nicht aber die Bootloader-Zeit davor – dafür braucht es die Pull-ups.
+>
+> Beim MCP23S17 wiegt derselbe Punkt schwerer: ein Zufallsframe könnte `IODIR` umstellen und
+> Eingänge zu Ausgängen machen, die gegen die Kontaktschalter treiben.
 
 ---
 
@@ -422,10 +479,11 @@ Definierte, ungefährliche Zustände von Power-on bis Firmware-Init:
 7. **DIP-Puffer an 3,3 V betreiben** – die DIP-Leitungen treiben direkt in den ESP (47/21/14), und der S3 ist **nicht 5-V-tolerant**. Ein Puffer am 5-V-Rail würde die Pins zerstören. Beim Layout festlegen und prüfen.
 8. **Pulldown an GPIO3 (595-`SER`)** – GPIO3 ist Strapping-Pin (JTAG-Quellwahl) und floatet beim Boot. Ein 10-kΩ-Pulldown definiert gleichzeitig den Strapping-Zustand und den `SER`-Eingang des 74HCT541. Unkritisch (das Boot-Blanking über `/OE` hält die Lampen ohnehin aus), aber billige Absicherung.
 9. **595-`/OE` invertiert:** Firmware beachten – GPIO16 = HIGH schaltet Lampen ein (2N7002, siehe 6.1).
-10. **Kontakte physisch:** Endgültige Pin-Zuordnung der Kontakte auf die Steckerleisten in der Verdrahtungsdoku festlegen.
+10. **Kontakte physisch:** Pin-Zuordnung liegt in `datasheets/Kegelautomat_Steckerbelegung.xlsx` (Blatt „Stecker") und ist in Abschnitt 9.2 übernommen. Offen bleibt nur die Reihenfolge von SW10–SW13 innerhalb GPA2–GPA5 (siehe 9.2).
 11. **Audio:** SD-Karten-Slot, MAX98357A-Modul (Gain/Kanal per Widerstand) und Lautsprecher einplanen; Details in Abschnitt 13.
 12. **Display-Kabel (Variante B):** Serien-R (68–100 Ω) an CLK/DIN/CS vorsehen, SPI-Takt des MAX auf ~1 MHz, Abblockung + beide GND-Pins am MAX7221, RSET moderat, Masse-Verschachtelung des 34-poligen Bands beibehalten, Original-„Widerstände"-Platine entfernen (Konstantstromquelle). Falls Rest-Ghosting auftritt → Variante A (MAX7221 ins Display-Gehäuse). Siehe Abschnitt 8.
 13. **Common cathode:** Für den gewählten **SC08-11EWA lt. Datenblatt bestätigt** (Common Cathode, rechter DP) – passt zum MAX7221 (common-cathode-only). Bei abweichenden Digit-Typen vorher gegenprüfen. RSET = **12 kΩ** (nicht 10 kΩ) für ~40 mA bei V_F ≈ 2 V (siehe Abschnitt 8.5/8.6).
+14. **Pull-ups an den SPI3-`CS`-Leitungen** – je 10 kΩ nach 3,3 V, an den 541-**Eingang** von GPIO18 (MAX7221) und direkt an das Netz GPIO15 (MCP23S17, hängt nicht am 541). Ohne sie sind beide Chip-Selects bis `spibus_init()` undefiniert; der MAX7221 fing sich dabei einen Störframe ein (heller Segmentblitz beim Einschalten, gefunden 2026-07-28). Details im Kasten am Ende von Abschnitt 11, Review-Punkt 8.
 
 ---
 
@@ -488,7 +546,10 @@ Drei DIP-Schalter (DIP1-3) teilen sich die I²S-Leitungen (GPIO47/21/14). Ein Pu
 
 > **Wichtig:** Der DIP-Puffer muss aus **3,3 V** versorgt werden – er treibt direkt auf ESP-Pins, und der S3 ist nicht 5-V-tolerant (siehe Abschnitt 12, Punkt 7).
 
-**Firmware:** Die zentralen Pin-Zuweisungen stehen in `gpiodefs.h` (I²S, SD, Taster/DIP). Die Audiokette (ESP-IDF: I²S-Treiber + FATFS/SD) wird als zweiter Schritt aufgesetzt.
+**Firmware:** Die Audiokette ist umgesetzt – WAV-Dateien (PCM, 16 Bit) von SD über den
+ESP-IDF-Treiber `i2s_std` an den MAX98357A, siehe `main/audio.c` im Firmware-Repository
+(`C:\Users\bonta\ESP32_source\kegelautomat`). Die DIP-Schalter werden dort beim Start
+gelesen, *bevor* der I²S-Kanal angelegt wird.
 
 **Für die Platine:** SD-Slot, MAX98357A-Modul und Lautsprecher vorsehen; Analog-/Audio-GND sternförmig und getrennt vom Leistungs-GND der Lampen/Spulen führen.
 

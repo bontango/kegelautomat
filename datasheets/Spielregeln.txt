@@ -1,0 +1,5 @@
+Spulen:
+1x Münzweiche (Schaltet Münzprüfer mechanich frei wie Geldspieler früher)
+1x Kugelfreigabe! Spule muss ( sofern noch Restbälle vorhanden ) ca 2 Sekunden 
+nach Betätigung eines Kontaktes 1-9 für ca 1-2 Sekunden anziehen (Timing muss getestet werden).
+Eventuell zusätzliches anziehen wenn im Spiel 30 Sekunden kein <kontskt 1-9 betätigt wurde ("Ballsuche")

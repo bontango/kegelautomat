@@ -62,15 +62,36 @@ den originalen Spielablauf nach. Aktuell: **Hardware-/Platinen-Entwurf**.
 - `Steuerplatine_Doku.md` – **Haupt-Doku**: Funktionsweise, S3-Portbelegung + Treiber-ICs,
   Blockdiagramm, Boot-/Sicherheitsverhalten, offene Punkte.
 - `gpiodefs.h` – zentrale GPIO-Zuweisungen (I²S, SD, Bedienung/DIP).
+- `Review_v07.md` – Prüfung des v07-Entwurfs (Stand 2026-07-17), Aktionsliste.
 - `datasheets/` – MCP23S17, MAX7219/7221, ESP32-S3-Pinout, PCB-Skizze, Foto Automat,
-  `Display.jpg` (Original-Display-Verdrahtung: 8×8-Matrix, 34-pol. Stecker).
+  `Display.jpg` (Original-Display-Verdrahtung: 8×8-Matrix, 34-pol. Stecker),
+  `Kegelautomat_Steckerbelegung.xlsx` (**Lampen-/Kontakt-/Digit-Zuordnung**, Blätter
+  „Stecker" und „Spielfeld").
+
+## Firmware-Repository (separat)
+Der Code liegt **nicht hier**, sondern in
+[bontango/kegelautomat-firmware](https://github.com/bontango/kegelautomat-firmware),
+Arbeitskopie `C:\Users\bonta\ESP32_source\kegelautomat`
+(ESP-IDF 5.5.1, C). Dieses Doku-Repo ist [bontango/kegelautomat](https://github.com/bontango/kegelautomat).
+Stand der Firmware: **v0.01**, Programmgerüst mit Selbsttest – Treiber für Lampen (595),
+Displays (MAX7221), Kontakte (MCP23S17), Spulen, Audio (WAV von SD), SD-Karte,
+Firmware-Update via `update.bin`, Taster/DIP. Der Spielablauf fehlt noch.
+
+**Arbeitsteilung:** Dieses Repo ist die **maßgebliche Quelle für die Elektrik**; das
+Firmware-Repo hält nur die abgeleitete Sicht darauf (`main/gpiodefs.h`, `main/hwmap.h`,
+`docs/hardware.md`). Wird hier etwas an Portbelegung, Steckerbelegung oder
+Platinenrevision geändert, ist es dort nachzuziehen – Details im Abschnitt
+„Doku-Vertrag" in `C:\Users\bonta\ESP32_source\kegelautomat\CLAUDE.md`.
+Umgekehrt gehören Erkenntnisse aus dem Hardware-Test (z. B. die endgültige Zuordnung
+SW10–SW13 auf GPA2–GPA5) **zuerst hierher**.
 
 ## Status & nächste Schritte
-- **Jetzt:** Prototyp-Platine auf S3 entwerfen anhand der Doku.
-- **Step 2:** Firmware mit ESP-IDF/VSCode (I²S + FATFS/SD, 595-/MCP-/MAX7221-Ansteuerung).
-  Im Repo liegt dafür noch kein Code.
+- **Hardware:** Layout v07 fertig; die offenen Punkte aus `Review_v07.md` (Freilaufdioden,
+  24-V-Konzept, 2N7002-Gate-Pulldown, VBUS-Entkopplung) vor dem Fertigen abarbeiten.
+- **Firmware:** Gerüst + Selbsttest stehen (siehe oben). Als Nächstes weitere Testmodi
+  und dann der Spielablauf.
 - Offene HW-Punkte: 5-V-Strombudget (30 Lampen), Freilaufdioden an den 2 Spulen, IRL540-Strom
-  real prüfen, DIP-Puffer im I²S-Betrieb hochohmig halten.
+  real prüfen.
 
 ## Konventionen
 - Doku-Sprache: **Deutsch**.

@@ -33,12 +33,14 @@
 #define I2S_DATA_OUT_PIN   14   // Serial Data Out (DIN to MAX98357A)
 
 // 3 Digital Pins for buttons/dips (buttons.c)
-// DIP1-3 share the I2S lines, decoupled by 3 diodes (cathode towards the ESP pin).
-// Read: drive READ_DIP_GPIO HIGH, I2S pins as inputs with internal pulldown.
-// Only read the DIPs while I2S is idle; keep READ_DIP_GPIO LOW during playback.
+// DIP1-3 share the I2S lines, decoupled by 3 diodes D1-D3 (cathode towards the
+// ESP pin, anode towards the switch). Scan: READ_DIP_GPIO = input with pull-up,
+// the I2S pins become outputs and are driven LOW one at a time -- a closed DIP
+// then pulls READ_DIP_GPIO LOW through its diode (0 = on, 1 = open).
+// Only read the DIPs while I2S is idle, then release all four pins.
 #define ADJUST_GPIO        4
 #define SET_GPIO           5
-#define READ_DIP_GPIO      13   // common pole of the DIP switch (HIGH = read)
+#define READ_DIP_GPIO      13   // common pole of the DIP switch (input, pull-up)
 #define DIP1_GPIO          I2S_WS_PIN
 #define DIP2_GPIO          I2S_BLK_PIN
 #define DIP3_GPIO          I2S_DATA_OUT_PIN

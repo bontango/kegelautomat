@@ -171,7 +171,7 @@ Das Modul **ESP32-S3-WROOM-1-N16R8** (16 MB Flash, **8 MB Octal-PSRAM**) führt 
 | **14** | I²S **DIN** (+DIP3) | OUT/IN | → MAX98357A DIN | DIP3 gemultiplext |
 | **4**  | **ADJUST**-Taster | IN | Taster gegen GND | Bedienung |
 | **5**  | **SET**-Taster | IN | Taster gegen GND | Bedienung |
-| **13** | **DIP-Read-Enable** | OUT | → gemeinsamer Pol des DIP-Schalters S4 | HIGH = DIP1-3 auf 47/21/14 lesbar (Dioden, siehe 13.3) |
+| **13** | **DIP-Read** | IN | ← gemeinsamer Pol des DIP-Schalters S4 | Eingang mit Pull-up; DIP1-3 werden über 47/21/14 gescannt (Dioden, siehe 13.3) |
 | **17** | SPI3 **SCLK** | OUT | → 74HCT541 (→MAX) **und** direkt → MCP | HW-SPI3-Takt |
 | **8**  | SPI3 **MOSI** | OUT | → 74HCT541 (→MAX) **und** direkt → MCP | |
 | **7**  | SPI3 **MISO** | IN | ← MCP23S17 SO (3,3 V) | nur MCP treibt MISO |
@@ -581,8 +581,22 @@ ESP-Pin (LRC/BCLK/DIN) ◄──|◄── DIP-Schalter S4 ──► gemeinsamer
                     Kathode    Anode
 ```
 
-- **Einlesen:** GPIO13 als Ausgang **HIGH**. Ein geschlossener DIP zieht den zugehörigen ESP-Pin über die Diode auf ~2,6 V (3,3 V − U_F) = High; der ESP-Pin ist dabei Eingang mit **internem Pulldown**, ein offener DIP liest LOW.
-- **Audio-Betrieb:** GPIO13 auf **LOW** (oder Eingang). Die Dioden sind dann in Richtung Schalter gesperrt, sobald die I²S-Leitung High führt – die Audio-Leitungen werden **nicht** belastet, und der DIP-Zweig kann nichts in sie einspeisen.
+**Gelesen wird im Scan-Verfahren** (so implementiert in `main/buttons.c` des Firmware-Repos):
+
+- **GPIO13 = Eingang mit internem Pull-up.** Die drei I²S-Pins werden **Ausgänge** und
+  nacheinander **einzeln auf LOW** gezogen, die übrigen bleiben HIGH.
+- Ist der zugehörige DIP **geschlossen**, fließt Strom vom Pull-up an GPIO13 über den
+  Schalter und die Diode (Anode → Kathode) in den LOW getriebenen Pin – **GPIO13 liest LOW**.
+  Offener DIP → GPIO13 bleibt HIGH. Also: **0 = ein, 1 = offen**.
+- Die Diodenrichtung ist dabei entscheidend: Sie verhindert, dass die zwei *nicht*
+  abgefragten Leitungen (HIGH) das Ergebnis verfälschen – nur der LOW getriebene Pin kann
+  Strom aufnehmen.
+
+**Im Audio-Betrieb** werden alle vier Pins zurückgesetzt (`gpio_reset_pin()`); GPIO13 ist
+dann hochohmig ohne Pull-up. Die Dioden sperren in Richtung Schalter, sobald die I²S-Leitung
+High führt – die Audio-Leitungen werden **nicht** belastet, und der DIP-Zweig kann nichts in
+sie einspeisen.
+
 - **Inhärent 3,3-V-sicher:** Am gesamten Zweig sind nur ESP-Pins und die Dioden beteiligt, kein 5-V-Baustein. Die frühere Anforderung „DIP-Puffer muss an 3,3 V hängen" entfällt damit ersatzlos.
 - Die DIPs deshalb **beim Start lesen, bevor der I²S-Kanal angelegt wird**.
 

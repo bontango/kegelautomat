@@ -254,16 +254,29 @@ ESP GPIO16 ──[ 100 Ω ]──┬──► Gate T33 (2N7002)   Drain ──�
 - `/OE` ← 2N7002 (GPIO16, 5 V) – LOW = Ausgänge aktiv, HIGH = alle Ausgänge hochohmig (siehe 6.1)
 - `/SRCLR` → fest 5 V
 
-**Bit-Zuordnung (Vorschlag):**
+**Bit-Zuordnung:** Ausgang `T1`…`T32` fortlaufend über die Kaskade – IC1 (erstes im Bus)
+Q0…Q7 = T1–T8, IC2 = T9–T16, IC3 = T17–T24, IC4 (letztes) = T25–T32.
 
-| 595 | Bit (Q) | Lampen |
-|-----|---------|--------|
-| IC1 (erstes im Bus) | Q0…Q7 | Lampe 1–8 |
-| IC2 | Q0…Q7 | Lampe 9–16 |
-| IC3 | Q0…Q7 | Lampe 17–24 |
-| IC4 (letztes) | Q0…Q7 | Lampe 25–30, **Q6/Q7 = Reserve** |
+**Funktion je Ausgang** (maßgeblich `datasheets/Kegelautomat_Steckerbelegung.xlsx`,
+Stecker J5–J8; Stand 2026-08-07):
 
-> **30 von 32 Ausgängen genutzt**, 2 Reserve.
+| Stecker | Ausgänge | Funktion |
+|---------|----------|----------|
+| J5 | T1…T9   | Zahl-Lampen **1…9**, der Reihe nach |
+| J6 | T10…T18 | Buchstaben **B I G S T R I K E** (links → rechts) |
+| J7 | T19…T27 | Kegel-Lampen **1…9**, der Reihe nach |
+| J7 | T28     | **TILT** |
+| J8 | T29, T30 | **Reserve**, nicht verdrahtet (keine Ader in der Steckerbelegung) |
+| J8 | T31     | **Münzeinwurf frei** (Beleuchtung des Münzschlitzes) |
+| J8 | T32     | **Starttaste** |
+
+> **30 von 32 Ausgängen genutzt** (T1–T28, T31, T32), 2 Reserve (T29, T30).
+
+> ⚠ **Geändert gegenüber der Fassung bis 2026-07-19:** Zahl- und Kegel-Lampen liegen am
+> Stecker **nach ihrer Nummer** sortiert, nicht nach ihrer Position auf der Frontscheibe
+> (die weiterhin 1, 3, 5, 7, 9, 8, 6, 4, 2 ist, siehe 9.2). T28 ist jetzt als TILT belegt,
+> die Münzschlitz-Beleuchtung ist von T29 auf **T31** gewandert. Erst damit stimmen auch
+> die 30 genutzten Ausgänge – die alte Belegung kam nur auf 29.
 
 **Wichtig – definierter Aus-Zustand:**
 - Jedes MOSFET-Gate braucht einen **Pulldown (z. B. 100 kΩ)** nach GND. Solange `/OE` HIGH ist (Boot) sind die 595-Ausgänge hochohmig – der Pulldown hält das Gate sicher LOW → Lampe aus.
@@ -287,6 +300,11 @@ Die 8 Ziffern sind **fest als gemultiplexte 8×8-Matrix** verdrahtet – nicht s
 > „Masse-Verschachtelung", die frühere Fassungen dieser Doku forderten, gibt es in der
 > Original-Verdrahtung also nicht; siehe 8.4 Punkt 6 zur Frage, ob man sie einseitig
 > nachrüsten sollte.
+>
+> **Der J2-Block in `Kegelautomat_Steckerbelegung.xlsx` führt noch die v07-Pinnummern**
+> (Digits auf den geraden Pins, `SEG_DP` auf Pin 19). Für die Pinnummern gilt der
+> Schaltplan bzw. die Tabelle unten. Die Zuordnung `DIG_n` → Ziffer ist in beiden Quellen
+> gleich, die Firmware ist deshalb nicht betroffen.
 
 | J2-Pin | Netz | Ziffer / Segment |
 |:------:|------|------------------|
@@ -428,38 +446,54 @@ Direkte Verbindung nach GND genügt (keine Widerstände nötig). Wer sich einen 
 
 ### 9.2 IO-Belegung
 
-Maßgeblich ist `datasheets/Kegelautomat_Steckerbelegung.xlsx` (Blatt „Stecker", Stecker
-**J3** und **J4**). Alle Eingänge mit internem Pull-up, jeder Kontakt schaltet gegen GND.
+Maßgeblich ist `datasheets/Kegelautomat_Steckerbelegung.xlsx` (Stecker **J3** und **J4**),
+für die Port-Zuordnung von J4 zusätzlich `datasheets/Kegelautomat_v10_SCH.PDF`.
+Alle Eingänge mit internem Pull-up, jeder Kontakt schaltet gegen GND.
 
 | Port | Schalter | Stecker/Pin | Funktion |
 |------|----------|-------------|----------|
-| GPB0 | SW1  | J3-12 | Kontakt 1 |
-| GPB1 | SW2  | J3-11 | Kontakt 3 |
-| GPB2 | SW3  | J3-10 | Kontakt 5 |
-| GPB3 | SW4  | J3-9  | Kontakt 7 |
-| GPB4 | SW5  | J3-8  | Kontakt 9 |
-| GPB5 | SW6  | J3-7  | Kontakt 8 |
-| GPB6 | SW7  | J3-6  | Kontakt 6 |
+| GPB0 | SW1  | J3-12 | Kontakt 9 |
+| GPB1 | SW2  | J3-11 | Kontakt 8 |
+| GPB2 | SW3  | J3-10 | Kontakt 7 |
+| GPB3 | SW4  | J3-9  | Kontakt 6 |
+| GPB4 | SW5  | J3-8  | Kontakt 5 |
+| GPB5 | SW6  | J3-7  | Kontakt 4 |
+| GPB6 | SW7  | J3-6  | Kontakt 3 |
 | GPB7 | SW14 | J3-5  | **Reserve** (auf den Header geführt, nutzbar) |
-| GPA1 | SW8  | J3-4  | Kontakt 4 |
-| GPA0 | SW9  | J3-3  | Kontakt 2 |
-| GPA2 | SW10 | J4-6  | Start ⚠ |
-| GPA3 | SW11 | J4-4  | Münzer NO ⚠ |
-| GPA4 | SW12 | J4-3  | Münzer NC ⚠ |
-| GPA5 | SW13 | J4-2  | SLAM-Kontakt (NO) ⚠ |
+| GPA1 | SW8  | J3-4  | Kontakt 2 |
+| GPA0 | SW9  | J3-3  | Kontakt 1 |
+| GPA2 | SW10 | J4-6  | **Tilt** |
+| GPA3 | SW11 | J4-4  | Münzkontakt NO |
+| GPA4 | SW12 | J4-3  | Münzkontakt NC |
+| GPA5 | SW13 | J4-2  | **Starttaste** |
 | GPA6, GPA7 | – | – | **Reserve**, `nc` (nicht auf Header geführt) |
 
-> **Bilanz:** **13 belegte Kontakte** (Kontakt 1–9, Start, Münzer NO/NC, SLAM)
+> **Bilanz:** **13 belegte Kontakte** (Kontakt 1–9, Tilt, Münzkontakt NO/NC, Starttaste)
 > + **1 Reserve auf dem Header** (SW14, GPB7) + **2 Reserve `nc`** (GPA6/7) = 16 IO.
 
-⚠ **Noch zu verifizieren:** Die Steckerbelegung nennt für J4 (SW10–SW13) *keine*
-Port-Zuordnung. Dass diese vier auf **GPA2–GPA5** liegen, ist zwingend (alle anderen
-IO sind belegt bzw. `nc`) – **offen ist nur die Reihenfolge innerhalb GPA2–GPA5.**
-Beim Bestücken gegen den Schaltplan prüfen und hier wie in der Firmware
-(`main/hwmap.h`, Tabelle `contact_map[]`) eintragen.
+**Port-Zuordnung von J4 ist bestätigt** (früherer offener Punkt, erledigt 2026-08-07).
+Die Steckerbelegung lässt die Port-Spalte für SW10–SW13 leer; der Schaltplan der
+Revision v1.0 beantwortet sie eindeutig:
+**J4-6 = GPA2, J4-5 = `nc`, J4-4 = GPA3, J4-3 = GPA4, J4-2 = GPA5, J4-1 = GND.**
+Zusammen mit der Pin-Spalte der Steckerbelegung ergibt das die Tabelle oben.
 
-Die Kegel-/Zahl-/Kontakt-Reihenfolge auf dem Spielfeld ist von links nach rechts
-**1, 3, 5, 7, 9, 8, 6, 4, 2** (Blatt „Spielfeld").
+> ⚠ **Geändert gegenüber der Fassung bis 2026-07-19:** SW1–SW9 laufen jetzt **rückwärts**
+> (SW1 = Kontakt 9 … SW9 = Kontakt 1), und **SW10 und SW13 haben getauscht** – SW10 ist
+> der Tilt-Kontakt (früher „Start"), SW13 die Starttaste (früher „SLAM"). Die Bezeichnung
+> **SLAM entfällt**, der Automat nennt es Tilt.
+
+**Verhalten des Münzprüfers** (aus der Steckerbelegung, für die Spiellogik):
+
+- **Ruhestellung:** SW11 offen, SW12 geschlossen.
+- **Münzeinwurf:** SW11 kurz geschlossen, SW12 kurz offen.
+- **Hängende Münze:** 2 Sekunden nach SW11 ist SW12 immer noch offen.
+
+Die Kegel-/Zahl-/Kontakt-Reihenfolge **auf der Frontscheibe** ist von links nach rechts
+**1, 3, 5, 7, 9, 8, 6, 4, 2**. Achtung: Das ist **nicht** mehr die Steckerreihenfolge –
+seit der Neuaufnahme der Steckerbelegung (2026-08-07) sind Lampen wie Kontakte am Stecker
+nach ihrer *Nummer* sortiert, nicht nach ihrer Position auf der Scheibe. Die Firmware
+hält beides getrennt: `main/hwmap.h` bildet Nummer → Ausgang/Bit ab, die
+Spielfeldreihenfolge steht in `main/simstate.c` (`put_playfield()`).
 
 ### 9.3 Kontakt-Erfassung per Interrupt
 
@@ -550,7 +584,7 @@ Definierte, ungefährliche Zustände von Power-on bis Firmware-Init:
 
 1. **5-V-Netzteil dimensionieren** – bestimmt durch den Summenstrom der 30 Lampen (Lampenstrom messen) plus MAX98357A-Spitzen. Reserve einplanen. Dazu die **Ampacity** prüfen: je Lampen-Header nur **ein** +5-V-Pin (J7 versorgt ~10 Lampen), und J1-Pin4 trägt den gesamten Board-Strom über einen einzelnen 2,54-mm-Pin.
 2. **IRL540 real prüfen:** Spulenstrom messen und gegen die Transfer-Kennlinie bei V_GS = 5 V gegenchecken. Bei hohen Strömen ggf. auf einen MOSFET mit niedrigerem R_DS(on) bei 5 V wechseln.
-3. **Kontakte physisch:** Pin-Zuordnung liegt in `datasheets/Kegelautomat_Steckerbelegung.xlsx` (Blatt „Stecker") und ist in Abschnitt 9.2 übernommen. Offen bleibt nur die Reihenfolge von SW10–SW13 innerhalb GPA2–GPA5 (siehe 9.2).
+3. ~~**Kontakte physisch:** Reihenfolge von SW10–SW13 innerhalb GPA2–GPA5.~~ **Erledigt 2026-08-07** – aus `Kegelautomat_v10_SCH.PDF` belegt (J4-6/4/3/2 = GPA2/3/4/5), vollständige Tabelle in Abschnitt 9.2. Am Automaten mit dem Kontakttest der Firmware gegenzuprüfen, offen ist er aber nicht mehr.
 4. **Display-Band im Betrieb beobachten:** Die Matrixschleife über die ~1 m spannt ~0,04 m² auf (~2,4 µH, siehe 8.4.1). Zu erwarten ist keine Anzeigestörung, sondern allenfalls **Abstrahlung** im Takt der Anzeige – also eher Störungen *anderer* Baugruppen als des Displays. Rückfallebene bleibt Variante A (Kasten am Ende von Abschnitt 8). Kapazitives Ghosting ist rechnerisch ausgeschlossen (8.4 Punkt 3).
 5. **Optional bei einer künftigen Revision:** die 18 freien Adern von J2 platinenseitig auf GND legen – elektrostatischer Schirm, kostet nichts, behebt die Schleife aber nicht. Abwägung in **8.4.1**.
 

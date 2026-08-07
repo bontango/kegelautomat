@@ -169,9 +169,14 @@ Alles Übrige ist mengengleich; die restlichen Unterschiede sind reine Umbenennu
    einzelnen 2,54-mm-Pin. Gegen den realen Lampenstrom prüfen.
 4. **IRL540 real prüfen** – Spulenstrom messen und gegen die Transfer-Kennlinie bei
    V_GS = 5 V gegenchecken.
-5. **SW10–SW13 → GPA2–GPA5:** Die Reihenfolge innerhalb GPA2–GPA5 ist weiterhin nicht
-   dokumentiert (die Steckerbelegung nennt für J4 keine Port-Zuordnung). Beim Test ermitteln
-   und **zuerst hier** eintragen, dann im Firmware-Repo (`main/hwmap.h`).
+5. ~~**SW10–SW13 → GPA2–GPA5:** Reihenfolge innerhalb GPA2–GPA5 nicht dokumentiert.~~
+   **✅ Erledigt 2026-08-07.** Die Steckerbelegung lässt die Port-Spalte für J4 zwar weiter
+   leer, der Schaltplan v1.0 ist aber eindeutig: **J4-6 = GPA2, J4-4 = GPA3, J4-3 = GPA4,
+   J4-2 = GPA5** (J4-5 = `nc`, J4-1 = GND). Mit der Pin-Spalte der Steckerbelegung ergibt
+   das GPA2 = SW10 = **Tilt**, GPA3 = SW11 = Münzkontakt NO, GPA4 = SW12 = Münzkontakt NC,
+   GPA5 = SW13 = **Starttaste**. Eingetragen in `Steuerplatine_Doku.md` 9.2 und
+   `main/hwmap.h`. (Die bisher angenommene *Reihenfolge* war richtig; getauscht haben die
+   *Funktionen* von SW10 und SW13.)
 
 ---
 
@@ -189,5 +194,6 @@ Alles Übrige ist mengengleich; die restlichen Unterschiede sind reine Umbenennu
 | 8 | SPI3-`CS`-Pull-ups | ✅ R57/R58 je 10 kΩ → 3,3 V |
 | — | GPIO3-Pulldown | ✅ bestückt (war nur Empfehlung) |
 | — | J2-Belegung | ✅ korrigiert, Doku 8.1 neu |
-| — | Display-Band (Abstrahlung), 5-V-Ampacity, IRL540, SW10–13 | 🟡 offen, siehe oben |
+| — | SW10–SW13 → GPA2–GPA5 | ✅ aus Schaltplan v1.0 belegt, Doku 9.2 neu |
+| — | Display-Band (Abstrahlung), 5-V-Ampacity, IRL540 | 🟡 offen, siehe oben |
 | — | J2-Adern einseitig erden | 💡 optional bei künftiger Revision, siehe oben |

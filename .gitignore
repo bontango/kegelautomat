@@ -13,6 +13,10 @@ Thumbs.db
 # TARGET-3001 Platinen-Design (lokal halten, nicht ins oeffentliche Repo)
 target/
 
+# Sicherungskopien frueherer Staende der Steckerbelegung -- die jeweils gueltige
+# Fassung ist Kegelautomat_Steckerbelegung.xlsx, die Historie steht in git
+datasheets/*_alt*.xlsx
+
 # Scratch / temporaere Notizen
 neu 2.txt
 
